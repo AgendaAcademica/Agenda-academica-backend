@@ -48,4 +48,13 @@ describe("POST /api/v1/documents/extract", () => {
       expect.objectContaining({ fileName: "pagina-2.png" })
     ]));
   });
+
+  it("preserva indisponibilidade temporária como HTTP 503", async () => {
+    const extractor: AcademicExtractor = { extractDocuments: vi.fn().mockRejectedValue({ status: 503 }) };
+    const response = await request(createApp(env, extractor)).post("/api/v1/documents/extract")
+      .attach("file", Buffer.from("%PDF-1.7 teste"), { filename: "plano.pdf", contentType: "application/pdf" });
+    expect(response.status).toBe(503);
+    expect(response.body.retryable).toBe(true);
+    expect(response.headers["retry-after"]).toBe("30");
+  });
 });
