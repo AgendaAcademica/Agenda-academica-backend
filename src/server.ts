@@ -1,0 +1,1 @@
+import{createApp}from"./app.js";import{loadEnv}from"./config/env.js";import{GeminiAcademicExtractor}from"./services/gemini.service.js";const env=loadEnv();const app=createApp(env,new GeminiAcademicExtractor(env.GEMINI_API_KEY,env.GEMINI_MODEL));app.listen(env.PORT,"0.0.0.0",()=>console.log(`API acadêmica disponível na porta ${env.PORT}`));
