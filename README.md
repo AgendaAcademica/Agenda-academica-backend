@@ -22,6 +22,9 @@ curl -X POST http://localhost:3000/api/v1/documents/extract -F "file=@plano-de-e
 
 # Imagem de cronograma ou aviso acadêmico
 curl -X POST http://localhost:3000/api/v1/documents/extract -F "file=@cronograma.png"
+
+# Várias imagens da mesma disciplina (até 10)
+curl -X POST http://localhost:3000/api/v1/documents/extract -F "files=@pagina-1.png" -F "files=@pagina-2.png"
 ```
 
 A resposta contém `data` com o documento, a disciplina e `events`; e `meta` com nome, tamanho e quantidade de eventos. Também há `GET /health`.

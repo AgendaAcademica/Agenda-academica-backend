@@ -14,20 +14,26 @@ function hasValidSignature(buffer: Buffer, mimeType: string): boolean {
 
 export function documentsRouter(extractor: AcademicExtractor, maxMb: number): Router {
   const router = Router();
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.floor(maxMb * 1024 * 1024), files: 1 } });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.floor(maxMb * 1024 * 1024), files: 10 } });
 
-  router.post("/extract", upload.single("file"), async (req, res, next) => {
+  router.post("/extract", upload.fields([{ name: "file", maxCount: 1 }, { name: "files", maxCount: 10 }]), async (req, res, next) => {
     try {
-      if (!req.file) {
+      const grouped = (req.files ?? {}) as Record<string, Express.Multer.File[]>;
+      const files = [...(grouped.file ?? []), ...(grouped.files ?? [])];
+      if (files.length === 0) {
         res.status(400).json({ error: "Envie um PDF ou imagem no campo 'file'." });
         return;
       }
-      if (!supportedMimeTypes.has(req.file.mimetype) || !hasValidSignature(req.file.buffer, req.file.mimetype)) {
+      if (files.some(file => !supportedMimeTypes.has(file.mimetype) || !hasValidSignature(file.buffer, file.mimetype))) {
         res.status(415).json({ error: "O arquivo deve ser um PDF, JPEG, PNG ou WebP válido." });
         return;
       }
-      const data = await extractor.extractDocument(req.file.buffer, req.file.originalname, req.file.mimetype);
-      res.json({ data, meta: { fileName: req.file.originalname, fileSize: req.file.size, eventsCount: data.events.length, mimeType: req.file.mimetype } });
+      if (files.length > 1 && files.some(file => !file.mimetype.startsWith("image/"))) {
+        res.status(415).json({ error: "O envio múltiplo aceita somente imagens." });
+        return;
+      }
+      const data = await extractor.extractDocuments(files.map(file => ({ buffer: file.buffer, fileName: file.originalname, mimeType: file.mimetype })));
+      res.json({ data, meta: { fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, eventsCount: data.events.length, mimeType: files.length === 1 ? files[0]!.mimetype : "multipart/images" } });
     } catch (error) {
       next(error);
     }
