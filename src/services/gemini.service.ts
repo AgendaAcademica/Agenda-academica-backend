@@ -26,7 +26,16 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
     };
     const response = await this.generateWithRetry(request);
     if (!response.text) throw new Error("O Gemini retornou uma resposta vazia");
-    return extractedSyllabusSchema.parse(JSON.parse(response.text));
+    const extracted = extractedSyllabusSchema.parse(JSON.parse(response.text));
+    const rawScheduleStartTime = extracted.schedule.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/)?.[0] ?? "";
+    const scheduleStartTime = rawScheduleStartTime ? rawScheduleStartTime.padStart(5, "0") : "";
+    return {
+      ...extracted,
+      events: extracted.events.map(event => ({
+        ...event,
+        time: event.time || scheduleStartTime
+      }))
+    };
   }
 
   private async generateWithRetry(request: Parameters<GoogleGenAI["models"]["generateContent"]>[0]) {
