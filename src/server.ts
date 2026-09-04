@@ -5,7 +5,7 @@ import { GeminiAcademicExtractor } from "./services/gemini.service.js";
 const env = loadEnv();
 const app = createApp(
   env,
-  new GeminiAcademicExtractor(env.GEMINI_API_KEY, env.GEMINI_MODEL),
+  new GeminiAcademicExtractor(env.GEMINI_API_KEY, env.GEMINI_MODEL, env.GEMINI_FALLBACK_MODEL),
 );
 
 const server = app.listen(env.PORT, "0.0.0.0", () => {

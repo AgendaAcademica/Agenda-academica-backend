@@ -8,7 +8,11 @@ export interface AcademicExtractor {
 export class GeminiAcademicExtractor implements AcademicExtractor {
   private readonly client: GoogleGenAI;
 
-  constructor(apiKey: string, private readonly model: string) {
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+    private readonly fallbackModel = "gemini-3.5-flash-lite"
+  ) {
     this.client = new GoogleGenAI({ apiKey });
   }
 
@@ -24,7 +28,14 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
       ],
       config: { temperature: 0.1, responseMimeType: "application/json", responseJsonSchema: geminiResponseJsonSchema }
     };
-    const response = await this.generateWithRetry(request);
+    let response;
+    try {
+      response = await this.generateWithRetry(request);
+    } catch (error) {
+      if (!isRetryableApiError(error) || this.fallbackModel === this.model) throw error;
+      console.warn(`Modelo ${this.model} indisponível; tentando o modelo alternativo ${this.fallbackModel}.`);
+      response = await this.generateWithRetry({ ...request, model: this.fallbackModel });
+    }
     if (!response.text) throw new Error("O Gemini retornou uma resposta vazia");
     const extracted = extractedSyllabusSchema.parse(JSON.parse(response.text));
     const rawScheduleStartTime = extracted.schedule.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/)?.[0] ?? "";
@@ -45,14 +56,18 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
         return await this.client.models.generateContent(request);
       } catch (error) {
         const status = getApiStatus(error);
-        const retryable = status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-        if (!retryable || attempt >= delaysMs.length) throw error;
+        if (!isRetryableApiError(error) || attempt >= delaysMs.length) throw error;
         const jitter = Math.floor(Math.random() * 300);
         console.warn(`Gemini indisponível (HTTP ${status}); nova tentativa ${attempt + 2}/${delaysMs.length + 1}.`);
         await new Promise(resolve => setTimeout(resolve, delaysMs[attempt]! + jitter));
       }
     }
   }
+}
+
+export function isRetryableApiError(error: unknown): boolean {
+  const status = getApiStatus(error);
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
 export function getApiStatus(error: unknown): number | undefined {

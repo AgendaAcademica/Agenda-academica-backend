@@ -20,7 +20,16 @@ export function createApp(env: Env, extractor: AcademicExtractor) {
 
   const handler: ErrorRequestHandler = (error, _request, response, _next) => {
     const upstreamStatus = getApiStatus(error);
-    if (upstreamStatus === 429 || upstreamStatus === 503) {
+    if (upstreamStatus === 429) {
+      console.warn("Limite de uso do Gemini atingido (HTTP 429).");
+      response.setHeader("Retry-After", "30");
+      response.status(429).json({
+        error: "O limite temporário de análises foi atingido. Aguarde alguns instantes e tente novamente.",
+        retryable: true
+      });
+      return;
+    }
+    if (upstreamStatus === 500 || upstreamStatus === 502 || upstreamStatus === 503 || upstreamStatus === 504) {
       console.warn(`Gemini temporariamente indisponível (HTTP ${upstreamStatus}).`);
       response.setHeader("Retry-After", "30");
       response.status(503).json({

@@ -4,7 +4,7 @@ import { createApp } from "../src/app.js";
 import type { Env } from "../src/config/env.js";
 import type { AcademicExtractor } from "../src/services/gemini.service.js";
 
-const env: Env = { NODE_ENV: "test", PORT: 3000, GEMINI_API_KEY: "test", GEMINI_MODEL: "test", MAX_PDF_SIZE_MB: 1, CORS_ORIGIN: "*" };
+const env: Env = { NODE_ENV: "test", PORT: 3000, GEMINI_API_KEY: "test", GEMINI_MODEL: "test", GEMINI_FALLBACK_MODEL: "test-lite", MAX_PDF_SIZE_MB: 1, CORS_ORIGIN: "*" };
 const data = { documentTitle: "Plano", disciplineName: "Cálculo I", disciplineCode: "MAT101", professor: "Ada", term: "2026/2", classroom: "A1", schedule: "Seg 08:00", recommendedColorHex: "#2563EB", events: [] };
 
 describe("POST /api/v1/documents/extract", () => {
