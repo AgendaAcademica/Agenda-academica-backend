@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import type { AcademicExtractor } from "../services/gemini.service.js";
+import type { AcademicExtractor } from "../services/academic-extractor.js";
 
 const supportedMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
 

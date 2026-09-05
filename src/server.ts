@@ -1,15 +1,17 @@
 import { createApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
-import { GeminiAcademicExtractor } from "./services/gemini.service.js";
+import { createAcademicExtractor } from "./services/extractor.factory.js";
 
 const env = loadEnv();
 const app = createApp(
   env,
-  new GeminiAcademicExtractor(env.GEMINI_API_KEY, env.GEMINI_MODEL, env.GEMINI_FALLBACK_MODEL),
+  createAcademicExtractor(env),
 );
 
 const server = app.listen(env.PORT, "0.0.0.0", () => {
   console.log(`API acadêmica disponível na porta ${env.PORT}`);
+  const model = env.AI_PROVIDER === "openai" ? env.OPENAI_MODEL : env.GEMINI_MODEL;
+  console.log(`IA principal: ${env.AI_PROVIDER} (${model}); fallback: ${env.AI_FALLBACK_PROVIDER}.`);
 });
 
 const shutdown = (signal: string) => {

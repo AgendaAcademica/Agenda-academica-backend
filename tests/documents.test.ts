@@ -2,12 +2,21 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { Env } from "../src/config/env.js";
-import type { AcademicExtractor } from "../src/services/gemini.service.js";
+import type { AcademicExtractor } from "../src/services/academic-extractor.js";
 
-const env: Env = { NODE_ENV: "test", PORT: 3000, GEMINI_API_KEY: "test", GEMINI_MODEL: "test", GEMINI_FALLBACK_MODEL: "test-lite", MAX_PDF_SIZE_MB: 1, CORS_ORIGIN: "*" };
+const env: Env = { NODE_ENV: "test", PORT: 3000, AI_PROVIDER: "gemini", AI_FALLBACK_PROVIDER: "none", GEMINI_API_KEY: "test", GEMINI_MODEL: "test", GEMINI_FALLBACK_MODEL: "test-lite", OPENAI_MODEL: "gpt-5-mini", AI_CACHE_TTL_MINUTES: 1440, AI_CACHE_MAX_ENTRIES: 100, MAX_PDF_SIZE_MB: 1, CORS_ORIGIN: "*" };
 const data = { documentTitle: "Plano", disciplineName: "Cálculo I", disciplineCode: "MAT101", professor: "Ada", term: "2026/2", classroom: "A1", schedule: "Seg 08:00", recommendedColorHex: "#2563EB", events: [] };
 
 describe("POST /api/v1/documents/extract", () => {
+  it("expõe a configuração ativa sem revelar credenciais", async () => {
+    const extractor: AcademicExtractor = { extractDocuments: vi.fn() };
+    const response = await request(createApp(env, extractor)).get("/health");
+    expect(response.status).toBe(200);
+    expect(response.body.ai).toEqual({ provider: "gemini", model: "test", fallbackProvider: "none", credentialsConfigured: true });
+    expect(JSON.stringify(response.body)).not.toContain("GEMINI_API_KEY");
+    expect(JSON.stringify(response.body)).not.toContain("test-lite");
+  });
+
   it("valida ausência", async () => {
     const extractor: AcademicExtractor = { extractDocuments: vi.fn() };
     expect((await request(createApp(env, extractor)).post("/api/v1/documents/extract")).status).toBe(400);
