@@ -5,7 +5,7 @@ import type { Env } from "../src/config/env.js";
 import type { AcademicExtractor } from "../src/services/academic-extractor.js";
 
 const env: Env = { NODE_ENV: "test", PORT: 3000, AI_PROVIDER: "gemini", AI_FALLBACK_PROVIDER: "none", GEMINI_API_KEY: "test", GEMINI_MODEL: "test", GEMINI_FALLBACK_MODEL: "test-lite", OPENAI_MODEL: "gpt-5-mini", AI_CACHE_TTL_MINUTES: 1440, AI_CACHE_MAX_ENTRIES: 100, MAX_PDF_SIZE_MB: 1, CORS_ORIGIN: "*" };
-const data = { documentTitle: "Plano", disciplineName: "Cálculo I", disciplineCode: "MAT101", professor: "Ada", term: "2026/2", classroom: "A1", schedule: "Seg 08:00", recommendedColorHex: "#2563EB", events: [] };
+const data = { disciplines: [{ documentTitle: "Plano", disciplineName: "Cálculo I", disciplineCode: "MAT101", professor: "Ada", term: "2026/2", classroom: "A1", schedule: "Seg 08:00", recommendedColorHex: "#2563EB", events: [] }] };
 
 describe("POST /api/v1/documents/extract", () => {
   it("expõe a configuração ativa sem revelar credenciais", async () => {
@@ -32,6 +32,7 @@ describe("POST /api/v1/documents/extract", () => {
     const extractor: AcademicExtractor = { extractDocuments: vi.fn().mockResolvedValue(data) };
     const response = await request(createApp(env, extractor)).post("/api/v1/documents/extract").attach("file", Buffer.from("%PDF-1.7 teste"), { filename: "plano.pdf", contentType: "application/pdf" });
     expect(response.status).toBe(200);
+    expect(response.body.meta.disciplinesCount).toBe(1);
     expect(extractor.extractDocuments).toHaveBeenCalledWith([expect.objectContaining({ buffer: expect.any(Buffer), fileName: "plano.pdf", mimeType: "application/pdf" })]);
   });
 

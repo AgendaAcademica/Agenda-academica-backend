@@ -33,7 +33,8 @@ export function documentsRouter(extractor: AcademicExtractor, maxMb: number): Ro
         return;
       }
       const data = await extractor.extractDocuments(files.map(file => ({ buffer: file.buffer, fileName: file.originalname, mimeType: file.mimetype })));
-      res.json({ data, meta: { fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, eventsCount: data.events.length, mimeType: files.length === 1 ? files[0]!.mimetype : "multipart/images" } });
+      const eventsCount = data.disciplines.reduce((sum, discipline) => sum + discipline.events.length, 0);
+      res.json({ data, meta: { fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, disciplinesCount: data.disciplines.length, eventsCount, mimeType: files.length === 1 ? files[0]!.mimetype : "multipart/images" } });
     } catch (error) {
       next(error);
     }

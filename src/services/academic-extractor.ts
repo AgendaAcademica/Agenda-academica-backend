@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import type { ExtractedSyllabus } from "../schemas/academic.schema.js";
+import type { ExtractedDocument } from "../schemas/academic.schema.js";
 
 export type AcademicFile = { buffer: Buffer; fileName: string; mimeType: string };
 
 export interface AcademicExtractor {
-  extractDocuments(files: AcademicFile[]): Promise<ExtractedSyllabus>;
+  extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument>;
 }
 
 export function getApiStatus(error: unknown): number | undefined {
@@ -50,8 +50,8 @@ export function retryAfterMs(error: unknown, fallbackMs = 1_000): number {
 }
 
 export class CachedAcademicExtractor implements AcademicExtractor {
-  private readonly cache = new Map<string, { value: ExtractedSyllabus; expiresAt: number }>();
-  private readonly inFlight = new Map<string, Promise<ExtractedSyllabus>>();
+  private readonly cache = new Map<string, { value: ExtractedDocument; expiresAt: number }>();
+  private readonly inFlight = new Map<string, Promise<ExtractedDocument>>();
 
   constructor(
     private readonly delegate: AcademicExtractor,
@@ -59,7 +59,7 @@ export class CachedAcademicExtractor implements AcademicExtractor {
     private readonly maxEntries = 100
   ) {}
 
-  async extractDocuments(files: AcademicFile[]): Promise<ExtractedSyllabus> {
+  async extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument> {
     const key = hashFiles(files);
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return structuredClone(cached.value);
@@ -88,7 +88,7 @@ export class CachedAcademicExtractor implements AcademicExtractor {
 export class FallbackAcademicExtractor implements AcademicExtractor {
   constructor(private readonly primary: AcademicExtractor, private readonly fallback: AcademicExtractor) {}
 
-  async extractDocuments(files: AcademicFile[]): Promise<ExtractedSyllabus> {
+  async extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument> {
     try {
       return await this.primary.extractDocuments(files);
     } catch (error) {

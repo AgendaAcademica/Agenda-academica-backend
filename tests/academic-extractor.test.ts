@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CachedAcademicExtractor, FallbackAcademicExtractor, getApiErrorCode, getApiRequestId, type AcademicExtractor, type AcademicFile } from "../src/services/academic-extractor.js";
 
 const files: AcademicFile[] = [{ buffer: Buffer.from("arquivo"), fileName: "plano.pdf", mimeType: "application/pdf" }];
-const result = { documentTitle: "Plano", disciplineName: "Cálculo", disciplineCode: "", professor: "", term: "", classroom: "", schedule: "", recommendedColorHex: "#2563EB", events: [] };
+const result = { disciplines: [{ documentTitle: "Plano", disciplineName: "Cálculo", disciplineCode: "", professor: "", term: "", classroom: "", schedule: "", recommendedColorHex: "#2563EB", events: [] }] };
 
 describe("CachedAcademicExtractor", () => {
   it("reutiliza o resultado para arquivos idênticos", async () => {
