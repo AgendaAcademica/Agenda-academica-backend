@@ -52,7 +52,8 @@ export function createApp(env: Env, extractor: AcademicExtractor) {
       return;
     }
     if (error instanceof ZodError) {
-      response.status(502).json({ error: "A inteligência artificial retornou dados fora do formato esperado.", details: error.issues });
+      console.error("Resposta da IA fora do formato esperado:", error.issues);
+      response.status(502).json({ error: "A inteligência artificial retornou dados fora do formato esperado." });
       return;
     }
     response.status(502).json({ error: "Não foi possível processar o documento com a inteligência artificial." });
