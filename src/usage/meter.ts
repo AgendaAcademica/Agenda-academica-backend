@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { providerErrorStatus } from "../services/provider-error.js";
 import type { GenerateContentResponse } from "@google/genai";
 import type { Response } from "openai/resources/responses/responses";
 import { AccountingError, HttpError, type Attempt, type Operation, type PriceTable, type Provider, type TokenUsage, type UsageLimits, type UsageStore } from "./types.js";
@@ -30,7 +31,7 @@ export function openaiUsage(response: Response) {
 }
 export function safeErrorCode(error: unknown): string {
   if (error instanceof HttpError) return error.code;
-  const status = typeof error === "object" && error !== null && "status" in error ? error.status : null;
+  const status = providerErrorStatus(error);
   return typeof status === "number" ? `UPSTREAM_${status}` : "PROCESSING_FAILED";
 }
 async function persist(action: () => Promise<void>) {

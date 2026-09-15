@@ -18,7 +18,7 @@ describe("real provider adapters with mocked network", () => {
     const attempts = [...(security.usage.store as MemoryUsageStore).attempts.values()];
     expect(attempts).toHaveLength(2); expect(attempts[0]!.estimatedCostUsd).toBeNull();
     expect(attempts[1]!.usage?.outputTokens).toBe(15);
-    expect(mocks.geminiOptions).toHaveBeenCalledWith(expect.objectContaining({ httpOptions: { timeout: 75000, retryOptions: { attempts: 1 } } }));
+    expect(mocks.geminiOptions).toHaveBeenCalledWith(expect.objectContaining({ httpOptions: { timeout: 75000 } }));
   });
   it("records Gemini fallback model instead of attributing it to the primary model", async () => {
     mocks.gemini.mockRejectedValueOnce({ status: 503 }).mockRejectedValueOnce({ status: 503 }).mockResolvedValueOnce({ text: JSON.stringify(result), modelVersion: "lite-snapshot",

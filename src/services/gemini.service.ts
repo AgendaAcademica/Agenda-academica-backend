@@ -14,7 +14,9 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
     private readonly model: string,
     private readonly fallbackModel = "gemini-3.5-flash-lite"
   ) {
-    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 75_000, retryOptions: { attempts: 1 } } });
+    // Without retryOptions this SDK uses one fetch and preserves ApiError.status.
+    // Even attempts: 1 activates a wrapper that discards HTTP status/body on errors.
+    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 75_000 } });
   }
 
   async extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument> {
@@ -54,7 +56,9 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
         return await this.generateMetered(request);
       } catch (error) {
         const status = getApiStatus(error);
-        if (!isRetryableApiError(error) || attempt >= 1) throw error;
+        // A timeout has already used 75 seconds: switch models instead of waiting
+        // another 75 seconds on the same model before the Android read deadline.
+        if (!isRetryableApiError(error) || status === 504 || attempt >= 1) throw error;
         const retryDelay = retryAfterMs(error, 1_000);
         if (retryDelay > 5_000) throw error;
         const delay = retryDelay + Math.floor(Math.random() * 300);

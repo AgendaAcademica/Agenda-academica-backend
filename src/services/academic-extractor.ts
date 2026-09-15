@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { markCache } from "../usage/meter.js";
 import { HttpError } from "../usage/types.js";
+import { providerErrorStatus } from "./provider-error.js";
 import type { ExtractedDocument } from "../schemas/academic.schema.js";
 
 export type AcademicFile = { buffer: Buffer; fileName: string; mimeType: string };
@@ -10,9 +11,7 @@ export interface AcademicExtractor {
 }
 
 export function getApiStatus(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null || !("status" in error)) return undefined;
-  const status = (error as { status?: unknown }).status;
-  return typeof status === "number" ? status : undefined;
+  return providerErrorStatus(error);
 }
 
 export function getApiErrorCode(error: unknown): string | undefined {
