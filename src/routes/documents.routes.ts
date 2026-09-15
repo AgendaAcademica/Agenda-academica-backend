@@ -1,6 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
 import type { AcademicExtractor } from "../services/academic-extractor.js";
+import type { UsageService } from "../usage/meter.js";
+import { boundedMemoryStorage } from "./upload-storage.js";
 
 const supportedMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
 
@@ -12,9 +14,9 @@ function hasValidSignature(buffer: Buffer, mimeType: string): boolean {
   return false;
 }
 
-export function documentsRouter(extractor: AcademicExtractor, maxMb: number): Router {
+export function documentsRouter(extractor: AcademicExtractor, maxMb: number, usage: UsageService, maxTotalMb: number): Router {
   const router = Router();
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.floor(maxMb * 1024 * 1024), files: 10 } });
+  const upload = multer({ storage: boundedMemoryStorage(Math.floor(maxTotalMb * 1024 * 1024)), limits: { fileSize: Math.floor(maxMb * 1024 * 1024), files: 10, fields: 0, parts: 11 } });
 
   router.post("/extract", upload.fields([{ name: "file", maxCount: 1 }, { name: "files", maxCount: 10 }]), async (req, res, next) => {
     try {
@@ -32,11 +34,15 @@ export function documentsRouter(extractor: AcademicExtractor, maxMb: number): Ro
         res.status(415).json({ error: "O envio múltiplo aceita somente imagens." });
         return;
       }
-      const data = await extractor.extractDocuments(files.map(file => ({ buffer: file.buffer, fileName: file.originalname, mimeType: file.mimetype })));
+      res.locals.processingExtraction = true;
+      const { data, operationId, cache } = await usage.run(res.locals.uid, files.length, files.reduce((sum, file) => sum + file.size, 0),
+        () => extractor.extractDocuments(files.map(file => ({ buffer: file.buffer, fileName: file.originalname, mimeType: file.mimetype }))));
       const eventsCount = data.disciplines.reduce((sum, discipline) => sum + discipline.events.length, 0);
-      res.json({ data, meta: { fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, disciplinesCount: data.disciplines.length, eventsCount, mimeType: files.length === 1 ? files[0]!.mimetype : "multipart/images" } });
+      res.json({ data, meta: { operationId, cache, fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, disciplinesCount: data.disciplines.length, eventsCount, mimeType: files.length === 1 ? files[0]!.mimetype : "multipart/images" } });
     } catch (error) {
       next(error);
+    } finally {
+      res.locals.releaseExtraction?.();
     }
   });
 

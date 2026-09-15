@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { markCache } from "../usage/meter.js";
+import { HttpError } from "../usage/types.js";
 import type { ExtractedDocument } from "../schemas/academic.schema.js";
 
 export type AcademicFile = { buffer: Buffer; fileName: string; mimeType: string };
@@ -30,6 +32,7 @@ export function getApiRequestId(error: unknown): string | undefined {
 }
 
 export function isRetryableApiError(error: unknown): boolean {
+  if (error instanceof HttpError) return false;
   const status = getApiStatus(error);
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
@@ -62,11 +65,11 @@ export class CachedAcademicExtractor implements AcademicExtractor {
   async extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument> {
     const key = hashFiles(files);
     const cached = this.cache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return structuredClone(cached.value);
+    if (cached && cached.expiresAt > Date.now()) { markCache("hit"); return structuredClone(cached.value); }
     if (cached) this.cache.delete(key);
 
     const existing = this.inFlight.get(key);
-    if (existing) return structuredClone(await existing);
+    if (existing) { markCache("shared"); return structuredClone(await existing); }
 
     const request = this.delegate.extractDocuments(files);
     this.inFlight.set(key, request);

@@ -1,11 +1,14 @@
 import { createApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { createAcademicExtractor } from "./services/extractor.factory.js";
+import { loadUsageConfig } from "./usage/config.js";
+import { createFirebaseSecurity } from "./usage/firebase.js";
 
 const env = loadEnv();
 const app = createApp(
   env,
   createAcademicExtractor(env),
+  createFirebaseSecurity(loadUsageConfig(env)),
 );
 
 const server = app.listen(env.PORT, "0.0.0.0", () => {

@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { geminiUsage, meteredCall } from "../usage/meter.js";
 import { extractedDocumentSchema, geminiResponseJsonSchema, type ExtractedDocument } from "../schemas/academic.schema.js";
 import { getApiStatus, isRetryableApiError, retryAfterMs, type AcademicExtractor, type AcademicFile } from "./academic-extractor.js";
 
@@ -13,7 +14,7 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
     private readonly model: string,
     private readonly fallbackModel = "gemini-3.5-flash-lite"
   ) {
-    this.client = new GoogleGenAI({ apiKey });
+    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 75_000, retryOptions: { attempts: 1 } } });
   }
 
   async extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument> {
@@ -26,7 +27,7 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
         { text: prompt },
         ...files.map(file => ({ inlineData: { mimeType: file.mimeType, data: file.buffer.toString("base64") } }))
       ],
-      config: { temperature: 0.1, responseMimeType: "application/json", responseJsonSchema: geminiResponseJsonSchema }
+      config: { temperature: 0.1, maxOutputTokens: 12_000, responseMimeType: "application/json", responseJsonSchema: geminiResponseJsonSchema }
     };
     let response;
     try {
@@ -34,7 +35,7 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
     } catch (error) {
       if (!isRetryableApiError(error) || this.fallbackModel === this.model) throw error;
       console.warn(`Modelo ${this.model} indisponível; tentando o modelo alternativo ${this.fallbackModel}.`);
-      response = await this.client.models.generateContent({ ...request, model: this.fallbackModel });
+      response = await this.generateMetered({ ...request, model: this.fallbackModel });
     }
     if (!response.text) throw new Error("O Gemini retornou uma resposta vazia");
     const extracted = extractedDocumentSchema.parse(JSON.parse(response.text));
@@ -50,14 +51,22 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
   private async generateWithRetry(request: Parameters<GoogleGenAI["models"]["generateContent"]>[0]) {
     for (let attempt = 0; ; attempt++) {
       try {
-        return await this.client.models.generateContent(request);
+        return await this.generateMetered(request);
       } catch (error) {
         const status = getApiStatus(error);
         if (!isRetryableApiError(error) || attempt >= 1) throw error;
-        const delay = retryAfterMs(error, 1_000) + Math.floor(Math.random() * 300);
+        const retryDelay = retryAfterMs(error, 1_000);
+        if (retryDelay > 5_000) throw error;
+        const delay = retryDelay + Math.floor(Math.random() * 300);
         console.warn(`Gemini indisponível (HTTP ${status}); fazendo uma nova tentativa.`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
+  }
+
+  private generateMetered(request: Parameters<GoogleGenAI["models"]["generateContent"]>[0]) {
+    return meteredCall("gemini", request.model, () => this.client.models.generateContent(request), response => ({
+      usage: geminiUsage(response), model: response.modelVersion ?? null, requestId: response.responseId ?? null
+    }));
   }
 }

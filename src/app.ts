@@ -6,8 +6,14 @@ import { ZodError } from "zod";
 import type { Env } from "./config/env.js";
 import { documentsRouter } from "./routes/documents.routes.js";
 import { getApiStatus, type AcademicExtractor } from "./services/academic-extractor.js";
+import { authenticate, concurrencyLimit, type VerifyToken } from "./usage/auth.js";
+import type { UsageService } from "./usage/meter.js";
+import { HttpError } from "./usage/types.js";
+import { usageRouter } from "./routes/usage.routes.js";
 
-export function createApp(env: Env, extractor: AcademicExtractor) {
+export type AppSecurity = { verifyToken: VerifyToken; testers: Set<string>; admins: Set<string>; usage: UsageService;
+  maxConcurrentExtractions: number; maxUploadTotalMb: number };
+export function createApp(env: Env, extractor: AcademicExtractor, security: AppSecurity) {
   const app = express();
   const origin = env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",").map(value => value.trim());
   app.disable("x-powered-by");
@@ -23,10 +29,17 @@ export function createApp(env: Env, extractor: AcademicExtractor) {
       credentialsConfigured: env.AI_PROVIDER === "openai" ? Boolean(env.OPENAI_API_KEY) : Boolean(env.GEMINI_API_KEY)
     }
   }));
-  app.use("/api/v1/documents", documentsRouter(extractor, env.MAX_PDF_SIZE_MB));
+  app.use("/api/v1/documents", authenticate(security.verifyToken, security.testers),
+    concurrencyLimit(security.maxConcurrentExtractions), documentsRouter(extractor, env.MAX_PDF_SIZE_MB, security.usage, security.maxUploadTotalMb));
+  app.use("/api/v1/admin/usage", authenticate(security.verifyToken, security.admins), usageRouter(security.usage.store));
   app.use((_request, response) => response.status(404).json({ error: "Rota não encontrada." }));
 
   const handler: ErrorRequestHandler = (error, _request, response, _next) => {
+    if (error instanceof HttpError) {
+      if (error.status === 429) response.setHeader("Retry-After", "60");
+      response.status(error.status).json({ error: error.message, code: error.code, retryable: error.status === 503 || error.code === "SERVER_BUSY" });
+      return;
+    }
     const upstreamStatus = getApiStatus(error);
     if (upstreamStatus === 429) {
       console.warn("Limite do provedor de IA atingido (HTTP 429).");
@@ -46,14 +59,18 @@ export function createApp(env: Env, extractor: AcademicExtractor) {
       });
       return;
     }
-    console.error(error);
+    // Never log whole SDK errors: they can contain document text, headers or credentials.
+    console.error("Falha no processamento", { status: upstreamStatus ?? null, type: error instanceof Error ? error.name : "unknown" });
     if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
       response.status(413).json({ error: `O arquivo excede o limite de ${env.MAX_PDF_SIZE_MB} MB.` });
       return;
     }
     if (error instanceof ZodError) {
-      console.error("Resposta da IA fora do formato esperado:", error.issues);
       response.status(502).json({ error: "A inteligência artificial retornou dados fora do formato esperado." });
+      return;
+    }
+    if (error instanceof multer.MulterError) {
+      response.status(400).json({ error: "Envio inválido. Use até dez arquivos nos campos file ou files.", code: "INVALID_UPLOAD" });
       return;
     }
     response.status(502).json({ error: "Não foi possível processar o documento com a inteligência artificial." });

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { meteredCall, openaiUsage } from "../usage/meter.js";
 import type { Response, ResponseCreateParamsNonStreaming, ResponseInputContent } from "openai/resources/responses/responses";
 import { extractedDocumentSchema, geminiResponseJsonSchema, type ExtractedDocument, type ExtractedSyllabus } from "../schemas/academic.schema.js";
 import { getApiErrorCode, getApiRequestId, getApiStatus, isRetryableApiError, retryAfterMs, type AcademicExtractor, type AcademicFile } from "./academic-extractor.js";
@@ -34,14 +35,18 @@ export class OpenAIAcademicExtractor implements AcademicExtractor {
   private async generateWithRetry(request: ResponseCreateParamsNonStreaming): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
       try {
-        return await this.client.responses.create(request);
+        return await meteredCall("openai", this.model, () => this.client.responses.create(request), response => ({
+          usage: openaiUsage(response), model: response.model, requestId: response._request_id ?? response.id
+        }));
       } catch (error) {
         const status = getApiStatus(error);
         const code = getApiErrorCode(error) ?? "sem_codigo";
         const requestId = getApiRequestId(error) ?? "sem_request_id";
         console.warn(`Falha OpenAI: HTTP ${status ?? "desconhecido"}; código=${code}; request_id=${requestId}.`);
         if (!shouldRetryOpenAIError(error) || attempt >= 1) throw error;
-        const delay = retryAfterMs(error, 1_000) + Math.floor(Math.random() * 300);
+        const retryDelay = retryAfterMs(error, 1_000);
+        if (retryDelay > 5_000) throw error;
+        const delay = retryDelay + Math.floor(Math.random() * 300);
         console.warn(`OpenAI temporariamente limitada; fazendo uma nova tentativa em ${Math.ceil(delay / 1_000)}s.`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }

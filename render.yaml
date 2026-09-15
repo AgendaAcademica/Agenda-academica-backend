@@ -30,3 +30,33 @@ services:
         value: "20"
       - key: CORS_ORIGIN
         value: "*"
+      - key: FIREBASE_PROJECT_ID
+        value: agendaacademicabd
+      - key: FIRESTORE_DATABASE_ID
+        value: "(default)"
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: TESTER_UIDS
+        sync: false
+      - key: ADMIN_UIDS
+        sync: false
+      - key: AI_PRICES_JSON
+        sync: false
+      - key: USER_DAILY_REQUESTS
+        value: "20"
+      - key: GLOBAL_DAILY_REQUESTS
+        value: "200"
+      - key: USER_REQUESTS_PER_MINUTE
+        value: "3"
+      - key: USER_DAILY_AI_ATTEMPTS
+        value: "40"
+      - key: GLOBAL_DAILY_AI_ATTEMPTS
+        value: "400"
+      - key: USER_DAILY_USD
+        value: "1"
+      - key: GLOBAL_DAILY_USD
+        value: "10"
+      - key: MAX_UPLOAD_TOTAL_MB
+        value: "20"
+      - key: MAX_CONCURRENT_EXTRACTIONS
+        value: "2"
