@@ -34,4 +34,41 @@ describe("Gemini SDK real HTTP error handling (only fetch is mocked)", () => {
     expect(attempts[0]!.errorCode).toBe("UPSTREAM_504");
     expect(attempts[1]!.requestedModel).toBe("test-lite");
   });
+  it.each([
+    ["MAX_TOKENS", JSON.stringify(document)],
+    ["STOP", '{"disciplines": ['],
+    ["STOP", '{"disciplines": []}'],
+    ["STOP", ""]
+  ])("falls back for incomplete/invalid output (%s) while keeping usage", async (finishReason, text) => {
+    const broken = () => new Response(JSON.stringify({ candidates: [{ finishReason, content: { role: "model", parts: [{ text }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }), { status: 200 });
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(broken()).mockResolvedValueOnce(ok());
+    const security = testSecurity();
+    const result = await security.usage.run("user-a", 1, 20, () => new GeminiAcademicExtractor("fake", "gemini-3.5-flash", "gemini-3.5-flash-lite").extractDocuments(files));
+    expect(result.data).toEqual(document);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
+    expect(firstBody.generationConfig.thinkingConfig.thinkingLevel).toBe("LOW");
+    const secondBody = JSON.parse(fetch.mock.calls[1]![1]!.body as string);
+    expect(secondBody.generationConfig.thinkingConfig).toBeUndefined();
+    const attempts = [...(security.usage.store as MemoryUsageStore).attempts.values()];
+    expect(attempts[0]!.usage?.outputTokens).toBe(5);
+    expect(attempts[0]!.providerFinishReason).toBe(finishReason);
+    expect(attempts[1]!.requestedModel).toBe("gemini-3.5-flash-lite");
+  });
+  it("does not accept or retry a safety-blocked response", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ candidates: [{ finishReason: "SAFETY" }] }), { status: 200 }));
+    const security = testSecurity();
+    await expect(security.usage.run("user-a", 1, 20, () => new GeminiAcademicExtractor("fake", "test", "test-lite").extractDocuments(files))).rejects.toMatchObject({ code: "AI_OUTPUT_BLOCKED" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("stops after an invalid fallback and records a specific operation error", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text: "{}" }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }), { status: 200 }));
+    const security = testSecurity();
+    await expect(security.usage.run("user-a", 1, 20, () => new GeminiAcademicExtractor("fake", "test", "test-lite").extractDocuments(files))).rejects.toMatchObject({ code: "AI_OUTPUT_TRUNCATED", status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const store = security.usage.store as MemoryUsageStore;
+    expect([...store.operations.values()][0]!.errorCode).toBe("AI_OUTPUT_TRUNCATED");
+    expect([...store.attempts.values()].every(a => a.usage !== null)).toBe(true);
+  });
+
 });

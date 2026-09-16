@@ -9,6 +9,7 @@ export type Operation = {
 };
 export type Attempt = {
   id: string; operationId: string; uid: string; createdAt: string; provider: Provider;
+  providerFinishReason?: string | null;
   requestedModel: string; actualModel: string | null; status: "pending" | "success" | "error";
   usage: TokenUsage | null; estimatedCostUsd: number | null; price: Price | null;
   durationMs: number | null; providerRequestId: string | null; errorCode: string | null;

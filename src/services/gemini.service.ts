@@ -1,6 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { geminiUsage, meteredCall } from "../usage/meter.js";
-import { extractedDocumentSchema, geminiResponseJsonSchema, type ExtractedDocument } from "../schemas/academic.schema.js";
+import { InvalidGeminiResponse, parseGeminiResponse } from "./gemini-response.js";
+import { geminiResponseJsonSchema, type ExtractedDocument } from "../schemas/academic.schema.js";
 import { getApiStatus, isRetryableApiError, retryAfterMs, type AcademicExtractor, type AcademicFile } from "./academic-extractor.js";
 
 export { getApiStatus, isRetryableApiError } from "./academic-extractor.js";
@@ -31,16 +32,16 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
       ],
       config: { temperature: 0.1, maxOutputTokens: 12_000, responseMimeType: "application/json", responseJsonSchema: geminiResponseJsonSchema }
     };
-    let response;
+    let extracted: ExtractedDocument;
     try {
-      response = await this.generateWithRetry(request);
+      extracted = parseGeminiResponse(await this.generateWithRetry(request));
     } catch (error) {
-      if (!isRetryableApiError(error) || this.fallbackModel === this.model) throw error;
+      const invalidOutput = error instanceof InvalidGeminiResponse && error.recoverable;
+      if ((!isRetryableApiError(error) && !invalidOutput) || this.fallbackModel === this.model) throw error;
+      if (invalidOutput) console.warn("Resposta Gemini inválida", { model: this.model, code: error.code });
       console.warn(`Modelo ${this.model} indisponível; tentando o modelo alternativo ${this.fallbackModel}.`);
-      response = await this.generateMetered({ ...request, model: this.fallbackModel });
+      extracted = parseGeminiResponse(await this.generateMetered({ ...request, model: this.fallbackModel }));
     }
-    if (!response.text) throw new Error("O Gemini retornou uma resposta vazia");
-    const extracted = extractedDocumentSchema.parse(JSON.parse(response.text));
     return {
       disciplines: extracted.disciplines.map(discipline => {
         const rawStart = discipline.schedule.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/)?.[0] ?? "";
@@ -69,8 +70,13 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
   }
 
   private generateMetered(request: Parameters<GoogleGenAI["models"]["generateContent"]>[0]) {
-    return meteredCall("gemini", request.model, () => this.client.models.generateContent(request), response => ({
-      usage: geminiUsage(response), model: response.modelVersion ?? null, requestId: response.responseId ?? null
+    // Gemini 3 Flash uses LOW reasoning to leave more output budget for the JSON.
+    // Flash-Lite keeps its default minimal reasoning; other model families keep their defaults.
+    const config = /^gemini-3[.\d-]*flash$/.test(request.model)
+      ? { ...request.config, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : request.config;
+    return meteredCall("gemini", request.model, () => this.client.models.generateContent({ ...request, config }), response => ({
+      usage: geminiUsage(response), model: response.modelVersion ?? null, requestId: response.responseId ?? null,
+      finishReason: response.candidates?.[0]?.finishReason ?? response.promptFeedback?.blockReason ?? null
     }));
   }
 }

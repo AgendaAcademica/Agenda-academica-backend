@@ -38,7 +38,7 @@ async function persist(action: () => Promise<void>) {
   try { await action(); } catch (error) { if (error instanceof HttpError) throw error; throw new AccountingError(); }
 }
 export async function meteredCall<T>(provider: Provider, model: string, call: () => Promise<T>, metadata: (response: T) => {
-  usage: TokenUsage | null; model: string | null; requestId: string | null;
+  usage: TokenUsage | null; model: string | null; requestId: string | null; finishReason?: string | null;
 }): Promise<T> {
   const ctx = usageContext.getStore();
   if (!ctx) throw new AccountingError();
@@ -57,6 +57,7 @@ export async function meteredCall<T>(provider: Provider, model: string, call: ()
     throw error;
   }
   const meta = metadata(response);
+  attempt.providerFinishReason = meta.finishReason ?? null;
   attempt.actualModel = meta.model; attempt.usage = meta.usage; attempt.providerRequestId = meta.requestId;
   attempt.estimatedCostUsd = estimateCost(meta.usage, attempt.price ?? undefined);
   attempt.status = "success"; attempt.durationMs = Date.now() - started;
