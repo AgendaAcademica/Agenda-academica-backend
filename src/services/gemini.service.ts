@@ -1,4 +1,5 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { syllabusInstructions } from "./syllabus-instructions.js";
 import { geminiUsage, meteredCall } from "../usage/meter.js";
 import { InvalidGeminiResponse, parseGeminiResponse } from "./gemini-response.js";
 import { geminiResponseJsonSchema, type ExtractedDocument } from "../schemas/academic.schema.js";
@@ -27,7 +28,7 @@ export class GeminiAcademicExtractor implements AcademicExtractor {
     const request: Parameters<GoogleGenAI["models"]["generateContent"]>[0] = {
       model: this.model,
       contents: [
-        { text: prompt },
+        { text: `${prompt} ${syllabusInstructions}` },
         ...files.map(file => ({ inlineData: { mimeType: file.mimeType, data: file.buffer.toString("base64") } }))
       ],
       config: { temperature: 0.1, maxOutputTokens: 12_000, responseMimeType: "application/json", responseJsonSchema: geminiResponseJsonSchema }
