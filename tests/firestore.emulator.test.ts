@@ -6,6 +6,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FirestoreUsageStore, COLLECTIONS } from "../src/usage/firestore-store.js";
 import { limits } from "./support.js";
 import type { Attempt, Operation } from "../src/usage/types.js";
+import { DOCUMENT_CACHE_COLLECTION } from "../src/services/document-cache.js";
 
 if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error("Run only through the local Firebase emulators.");
 const projectId = "demo-agenda-usage";
@@ -52,7 +53,7 @@ describe("Firestore persistence and atomic quotas", () => {
     expect((await getAuth(app).verifyIdToken(account.idToken, true)).uid).toBe(account.localId);
     const operation = op(account.localId); await store.reserveOperation(operation, limits);
     const base = `http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/${projectId}/databases/(default)/documents`;
-    for (const collection of Object.values(COLLECTIONS)) {
+    for (const collection of [...Object.values(COLLECTIONS), DOCUMENT_CACHE_COLLECTION]) {
       const read = await fetch(`${base}/${collection}`, { headers: { Authorization: `Bearer ${account.idToken}` } });
       expect(read.status).toBe(403);
       const write = await fetch(`${base}/${collection}?documentId=forged`, { method: "POST", headers: { Authorization: `Bearer ${account.idToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields: { estimatedCostUsd: { doubleValue: 0 } } }) });

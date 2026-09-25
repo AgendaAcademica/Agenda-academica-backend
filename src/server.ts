@@ -5,10 +5,11 @@ import { loadUsageConfig } from "./usage/config.js";
 import { createFirebaseSecurity } from "./usage/firebase.js";
 
 const env = loadEnv();
+const security = createFirebaseSecurity(loadUsageConfig(env));
 const app = createApp(
   env,
-  createAcademicExtractor(env),
-  createFirebaseSecurity(loadUsageConfig(env)),
+  createAcademicExtractor(env, security.documentCache),
+  security,
 );
 
 const server = app.listen(env.PORT, "0.0.0.0", () => {

@@ -27,7 +27,8 @@ O Render fornece `PORT` automaticamente. A API escuta em `0.0.0.0`, compila o Ty
 | `GEMINI_FALLBACK_MODEL` | Não | `gemini-3.5-flash-lite` | Modelo Gemini alternativo. |
 | `OPENAI_API_KEY` | Se usar OpenAI | — | Chave secreta da OpenAI. Cadastre somente no backend. |
 | `OPENAI_MODEL` | Não | `gpt-5-mini` | Modelo OpenAI usado na extração. |
-| `AI_CACHE_TTL_MINUTES` | Não | `1440` | Duração do cache em memória. |
+| `AI_DOCUMENT_CACHE_TTL_DAYS` | Não | `30` | Validade do JSON extraído no cache persistente Firestore, compartilhado entre usuários autorizados. |
+| `AI_CACHE_TTL_MINUTES` | Não | `1440` | Duração do adaptador de cache em memória, usado somente sem store persistente. |
 | `AI_CACHE_MAX_ENTRIES` | Não | `100` | Quantidade máxima de análises no cache. |
 | `MAX_PDF_SIZE_MB` | Não | `20` | Limite de tamanho dos documentos. |
 | `CORS_ORIGIN` | Não | `*` | Origem permitida. Para clientes web, prefira o domínio exato. |

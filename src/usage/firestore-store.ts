@@ -23,11 +23,14 @@ export class FirestoreUsageStore implements UsageStore {
       if (existing!.exists) return; // Safe to retry an uncertain transaction commit.
       const u = user!.data() ?? {}, g = global!.data() ?? {};
       const minuteCount = u.minute === minute ? number(u.minuteCount) : 0;
-      check(number(u.requests), limits.userDailyRequests, "USER_DAILY_QUOTA");
-      check(number(g.requests), limits.globalDailyRequests, "GLOBAL_DAILY_QUOTA");
+      const charge = operation.cache === "miss" ? 1 : 0;
+      if (charge) {
+        check(number(u.requests), limits.userDailyRequests, "USER_DAILY_QUOTA");
+        check(number(g.requests), limits.globalDailyRequests, "GLOBAL_DAILY_QUOTA");
+      }
       check(minuteCount, limits.userRequestsPerMinute, "USER_RATE_LIMIT");
-      tx.set(userRef, { requests: number(u.requests) + 1, minute, minuteCount: minuteCount + 1 }, { merge: true });
-      tx.set(globalRef, { requests: number(g.requests) + 1 }, { merge: true });
+      tx.set(userRef, { requests: number(u.requests) + charge, minute, minuteCount: minuteCount + 1 }, { merge: true });
+      tx.set(globalRef, { requests: number(g.requests) + charge }, { merge: true });
       tx.create(operationRef, operation);
     });
   }

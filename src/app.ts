@@ -36,8 +36,13 @@ export function createApp(env: Env, extractor: AcademicExtractor, security: AppS
 
   const handler: ErrorRequestHandler = (error, _request, response, _next) => {
     if (error instanceof HttpError) {
-      if (error.status === 429) response.setHeader("Retry-After", "60");
-      response.status(error.status).json({ error: error.message, code: error.code, retryable: error.status === 503 || error.code === "SERVER_BUSY" });
+      if (error.status === 429) {
+        const daily = ["USER_DAILY_QUOTA", "GLOBAL_DAILY_QUOTA", "USER_AI_QUOTA", "GLOBAL_AI_QUOTA", "USER_COST_LIMIT", "GLOBAL_COST_LIMIT"].includes(error.code);
+        const now = new Date();
+        const seconds = daily ? Math.ceil((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) - now.getTime()) / 1000) : 60;
+        response.setHeader("Retry-After", String(seconds));
+      }
+      response.status(error.status).json({ error: error.message, code: error.code, retryable: error.status === 503 || error.code === "SERVER_BUSY" || error.code === "USER_RATE_LIMIT" });
       return;
     }
     const upstreamStatus = getApiStatus(error);
@@ -46,6 +51,7 @@ export function createApp(env: Env, extractor: AcademicExtractor, security: AppS
       response.setHeader("Retry-After", "30");
       response.status(429).json({
         error: "O limite temporário de análises foi atingido. Aguarde alguns instantes e tente novamente.",
+        code: "PROVIDER_RATE_LIMIT",
         retryable: true
       });
       return;

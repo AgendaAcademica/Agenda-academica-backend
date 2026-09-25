@@ -68,10 +68,10 @@ export async function meteredCall<T>(provider: Provider, model: string, call: ()
 
 export class UsageService {
   constructor(readonly store: UsageStore, readonly limits: UsageLimits, readonly prices: PriceTable) {}
-  async run<T>(uid: string, filesCount: number, totalBytes: number, action: () => Promise<T>): Promise<{ data: T; operationId: string; cache: Operation["cache"] }> {
+  async run<T>(uid: string, filesCount: number, totalBytes: number, action: () => Promise<T>, cache: Operation["cache"] = "miss"): Promise<{ data: T; operationId: string; cache: Operation["cache"] }> {
     const started = Date.now();
     const operation: Operation = { id: randomUUID(), uid, createdAt: new Date(started).toISOString(), status: "pending",
-      cache: "miss", filesCount, totalBytes, durationMs: null, errorCode: null };
+      cache, filesCount, totalBytes, durationMs: null, errorCode: null };
     await persist(() => this.store.reserveOperation(operation, this.limits));
     return usageContext.run({ operation, store: this.store, limits: this.limits, prices: this.prices }, async () => {
       let data: T;

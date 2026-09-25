@@ -10,8 +10,10 @@ export class MemoryUsageStore implements UsageStore {
   async reserveOperation(op: Operation, cap: UsageLimits) {
     const today = [...this.operations.values()].filter(x => x.createdAt.slice(0, 10) === op.createdAt.slice(0, 10));
     const user = today.filter(x => x.uid === op.uid);
-    if (user.length >= cap.userDailyRequests || today.length >= cap.globalDailyRequests || user.filter(x => x.createdAt.slice(0, 16) === op.createdAt.slice(0, 16)).length >= cap.userRequestsPerMinute)
+    if (op.cache === "miss" && (user.filter(x => x.cache === "miss").length >= cap.userDailyRequests || today.filter(x => x.cache === "miss").length >= cap.globalDailyRequests))
       throw new HttpError(429, "USER_DAILY_QUOTA", "Cota atingida.");
+    if (user.filter(x => x.createdAt.slice(0, 16) === op.createdAt.slice(0, 16)).length >= cap.userRequestsPerMinute)
+      throw new HttpError(429, "USER_RATE_LIMIT", "Muitos envios.");
     this.operations.set(op.id, structuredClone(op));
   }
   async finishOperation(id: string, patch: Pick<Operation, "status" | "cache" | "durationMs" | "errorCode">) { Object.assign(this.operations.get(id)!, patch); }

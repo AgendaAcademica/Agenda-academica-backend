@@ -5,6 +5,7 @@ import { providerErrorStatus } from "./provider-error.js";
 import type { ExtractedDocument } from "../schemas/academic.schema.js";
 
 export type AcademicFile = { buffer: Buffer; fileName: string; mimeType: string };
+export type ExtractionRunner = (cache: "miss" | "hit" | "shared", action: () => Promise<ExtractedDocument>) => Promise<ExtractedDocument>;
 
 export interface AcademicExtractor {
   extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument>;
@@ -61,16 +62,16 @@ export class CachedAcademicExtractor implements AcademicExtractor {
     private readonly maxEntries = 100
   ) {}
 
-  async extractDocuments(files: AcademicFile[]): Promise<ExtractedDocument> {
+  async extractDocuments(files: AcademicFile[], run: ExtractionRunner = (_cache, action) => action()): Promise<ExtractedDocument> {
     const key = hashFiles(files);
     const cached = this.cache.get(key);
-    if (cached && cached.expiresAt > Date.now()) { markCache("hit"); return structuredClone(cached.value); }
+    if (cached && cached.expiresAt > Date.now()) return run("hit", async () => { markCache("hit"); return structuredClone(cached.value); });
     if (cached) this.cache.delete(key);
 
     const existing = this.inFlight.get(key);
-    if (existing) { markCache("shared"); return structuredClone(await existing); }
+    if (existing) return run("shared", async () => { markCache("shared"); return structuredClone(await existing); });
 
-    const request = this.delegate.extractDocuments(files);
+    const request = run("miss", () => this.delegate.extractDocuments(files));
     this.inFlight.set(key, request);
     try {
       const value = await request;

@@ -54,6 +54,45 @@ describe("authentication, quotas and reports", () => {
     expect((await upload(app)).status).toBe(200); expect((await upload(app)).status).toBe(429);
     expect(extractor.extractDocuments).toHaveBeenCalledTimes(1);
   });
+  it("serves cached documents after daily exhaustion but still enforces the minute limit", async () => {
+    const security = testSecurity();
+    security.usage = new UsageService(security.usage.store, { ...limits, userDailyRequests: 1, globalDailyRequests: 1 }, {});
+    const delegate = { extractDocuments: vi.fn().mockResolvedValue(data) };
+    const app = createApp(env, new CachedAcademicExtractor(delegate), security);
+    expect((await upload(app)).body.meta.cache).toBe("miss");
+    expect((await upload(app)).body.meta.cache).toBe("hit");
+    expect((await upload(app)).body.meta.cache).toBe("hit");
+    const blocked = await upload(app);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.code).toBe("USER_RATE_LIMIT");
+    expect(blocked.headers["retry-after"]).toBe("60");
+    expect(delegate.extractDocuments).toHaveBeenCalledTimes(1);
+    expect((await security.usage.store.report("2000", "2100")).operations).toHaveLength(3);
+  });
+  it("charges new analysis after cache expiry", async () => {
+    const security = testSecurity();
+    security.usage = new UsageService(security.usage.store, { ...limits, userDailyRequests: 1 }, {});
+    const delegate = { extractDocuments: vi.fn().mockResolvedValue(data) };
+    const app = createApp(env, new CachedAcademicExtractor(delegate, 0), security);
+    expect((await upload(app)).status).toBe(200);
+    expect((await upload(app)).body.code).toBe("USER_DAILY_QUOTA");
+    expect(delegate.extractDocuments).toHaveBeenCalledTimes(1);
+  });
+  it("shares an in-flight analysis without consuming another daily slot", async () => {
+    const security = testSecurity();
+    const usage = new UsageService(security.usage.store, { ...limits, userDailyRequests: 1, globalDailyRequests: 1 }, {});
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    const delegate = { extractDocuments: vi.fn(async () => { await barrier; return data; }) };
+    const cached = new CachedAcademicExtractor(delegate);
+    const execute = () => cached.extractDocuments(files, async (cache, action) => (await usage.run("user-a", 1, 20, action, cache)).data);
+    const first = execute();
+    const second = execute();
+    release();
+    await Promise.all([first, second]);
+    expect(delegate.extractDocuments).toHaveBeenCalledTimes(1);
+    expect((await usage.store.report("2000", "2100")).operations.map(op => op.cache)).toEqual(["miss", "shared"]);
+  });
   it("fails closed when persistence is unavailable", async () => {
     const security = testSecurity(); vi.spyOn(security.usage.store, "reserveOperation").mockRejectedValue(new Error("offline"));
     const extractor = { extractDocuments: vi.fn() };

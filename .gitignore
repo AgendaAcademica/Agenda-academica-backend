@@ -6,5 +6,4 @@ coverage/
 tmp/
 *-debug.log
 *service-account*.json
-consumo-antes-testes.json
-consumo-depois-testes.json
+testes-consumo/
