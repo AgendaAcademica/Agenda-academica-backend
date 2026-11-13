@@ -85,13 +85,15 @@ Autenticar com o **ID token Firebase do administrador**, não uma API key nem to
 ```powershell
 # ADMIN_ID_TOKEN e BACKEND_URL são variáveis locais já configuradas; não registrar o token em logs.
 $headers = @{ Authorization = "Bearer $env:ADMIN_ID_TOKEN" }
-Invoke-RestMethod -Uri "$env:BACKEND_URL/api/v1/admin/usage?from=2026-09-14&to=2026-09-14" -Headers $headers
-Invoke-WebRequest -Uri "$env:BACKEND_URL/api/v1/admin/usage?from=2026-09-14&to=2026-09-14&format=csv" -Headers $headers -OutFile consumo.csv
+Invoke-RestMethod -Uri "$env:BACKEND_URL/api/v1/admin/usage?from=2026-10-01&to=2026-10-01" -Headers $headers
+Invoke-WebRequest -Uri "$env:BACKEND_URL/api/v1/admin/usage?from=2026-10-01&to=2026-10-01&format=csv" -Headers $headers -OutFile consumo.csv
 ```
 
 `from` e `to` são inclusivos, no formato YYYY-MM-DD e em UTC, com até 31 dias. O JSON contém operações, tentativas e totais por UID. O CSV contém os totais e protege identificadores contra fórmulas de planilha. Se o período ultrapassar 10.000 registros de operações ou tentativas, o endpoint retorna 422 solicitando um intervalo menor; não corta totais silenciosamente. Datas da operação e da tentativa são independentes, então uma tentativa após a meia-noite entra no dia em que foi iniciada.
 
 ## Validação
+
+Ponto inicial do teste real do cache persistente: **01/10/2026**. Usar essa data como início do período nas consultas administrativas e preservar o mesmo documento de teste para a comparação posterior entre `miss` e `hit`.
 
 Cache persistente validado localmente em 24/09/2026: 50 testes unitários/HTTP, typecheck e build aprovados; 8 testes nos emuladores Auth/Firestore aprovados, incluindo concorrência, persistência, expiração, recuperação de reservas, JSON inválido, limite de tamanho e bloqueio de acesso por clientes. Nenhuma chamada real à IA ou escrita no banco de produção foi usada nessa validação. Referências: [transações Firestore](https://firebase.google.com/docs/firestore/manage-data/transactions) e [limites do Firestore](https://firebase.google.com/docs/firestore/quotas).
 

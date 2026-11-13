@@ -11,7 +11,7 @@ O repositório inclui um Blueprint em `render.yaml`. No painel do Render:
 1. Selecione **New > Blueprint** e conecte este repositório.
 2. Confirme a criação do serviço `agenda-academica-api`.
 3. Informe `GEMINI_API_KEY`, as credenciais Firebase Admin, os UIDs autorizados e as tarifas conforme `RELEASE_TEST.md`.
-4. Aguarde o deploy e confirme que `https://SEU-SERVICO.onrender.com/health` responde com `{"status":"ok"}`.
+4. Aguarde o deploy e confirme que `https://SEU-SERVICO.onrender.com/health` responde com `status: "ok"` e informa o provedor, o modelo, o fallback e se a credencial principal foi configurada.
 5. Configure no mobile a URL pública HTTPS do serviço.
 
 O Render fornece `PORT` automaticamente. A API escuta em `0.0.0.0`, compila o TypeScript no build, inicia por `npm start` e usa `/health` no monitoramento.
@@ -27,10 +27,23 @@ O Render fornece `PORT` automaticamente. A API escuta em `0.0.0.0`, compila o Ty
 | `GEMINI_FALLBACK_MODEL` | Não | `gemini-3.5-flash-lite` | Modelo Gemini alternativo. |
 | `OPENAI_API_KEY` | Se usar OpenAI | — | Chave secreta da OpenAI. Cadastre somente no backend. |
 | `OPENAI_MODEL` | Não | `gpt-5-mini` | Modelo OpenAI usado na extração. |
+| `FIREBASE_PROJECT_ID` | Sim | — | Projeto usado para validar tokens e registrar consumo/cache. |
+| `FIRESTORE_DATABASE_ID` | Não | `(default)` | Banco Firestore usado pelo backend. |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Localmente | — | Caminho para a conta de serviço Firebase Admin. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | No Render | — | JSON completo da conta de serviço, armazenado como segredo. |
+| `TESTER_UIDS` | Sim em produção | — | UIDs autorizados a extrair documentos, separados por vírgula. |
+| `ADMIN_UIDS` | Sim em produção | — | UIDs autorizados a consultar o relatório, separados por vírgula. |
+| `AI_PRICES_JSON` | Sim em produção | `{}` | Tarifas dos modelos ativos; formato detalhado em `RELEASE_TEST.md`. |
 | `AI_DOCUMENT_CACHE_TTL_DAYS` | Não | `30` | Validade do JSON extraído no cache persistente Firestore, compartilhado entre usuários autorizados. |
 | `AI_CACHE_TTL_MINUTES` | Não | `1440` | Duração do adaptador de cache em memória, usado somente sem store persistente. |
 | `AI_CACHE_MAX_ENTRIES` | Não | `100` | Quantidade máxima de análises no cache. |
 | `MAX_PDF_SIZE_MB` | Não | `20` | Limite de tamanho dos documentos. |
+| `MAX_UPLOAD_TOTAL_MB` | Não | `20` | Limite total por envio, considerando até dez arquivos. |
+| `MAX_CONCURRENT_EXTRACTIONS` | Não | `2` | Extrações simultâneas por processo. |
+| `USER_DAILY_REQUESTS` / `GLOBAL_DAILY_REQUESTS` | Não | `20` / `200` | Cotas diárias de novas análises. |
+| `USER_REQUESTS_PER_MINUTE` | Não | `3` | Limite por usuário em janela fixa UTC. |
+| `USER_DAILY_AI_ATTEMPTS` / `GLOBAL_DAILY_AI_ATTEMPTS` | Não | `40` / `400` | Cotas diárias de chamadas aos provedores, incluindo retries/fallback. |
+| `USER_DAILY_USD` / `GLOBAL_DAILY_USD` | Não | `1` / `10` | Bloqueios por custo conhecido estimado em USD. |
 | `CORS_ORIGIN` | Não | `*` | Origem permitida. Para clientes web, prefira o domínio exato. |
 | `NODE_ENV` | Não | `development` | O Blueprint define `production`. |
 | `PORT` | Não | `3000` | Definida automaticamente pelo Render. |
@@ -42,7 +55,8 @@ Requer Node.js 20 ou superior.
 ```powershell
 npm ci
 Copy-Item .env.example .env
-# escolha AI_PROVIDER e preencha a chave correspondente no .env
+# escolha AI_PROVIDER, preencha a chave correspondente, as credenciais Firebase
+# Admin, TESTER_UIDS/ADMIN_UIDS e as tarifas dos modelos ativos
 npm run dev
 ```
 
