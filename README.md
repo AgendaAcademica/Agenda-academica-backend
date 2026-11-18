@@ -81,6 +81,8 @@ Enquanto a OpenAI estiver inativa, mantenha `AI_PROVIDER=gemini` e `AI_FALLBACK_
 
 O endpoint de extração usa `multipart/form-data`: `file` para um PDF ou imagem; ou `files` para até dez imagens da mesma disciplina.
 
+Para importar vários planos, envie uma requisição por PDF. O [contrato de importação para o Android](docs/importacao-planos-ensino.md) registra limites, cotas, tratamento de erros, retomada da fila e o estado da validação desta integração.
+
 ```bash
 curl -X POST http://localhost:3000/api/v1/documents/extract -H "Authorization: Bearer $FIREBASE_ID_TOKEN" -F "file=@plano-de-ensino.pdf"
 curl -X POST http://localhost:3000/api/v1/documents/extract -H "Authorization: Bearer $FIREBASE_ID_TOKEN" -F "files=@pagina-1.png" -F "files=@pagina-2.png"

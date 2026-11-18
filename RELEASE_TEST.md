@@ -96,6 +96,8 @@ Invoke-WebRequest -Uri "$env:BACKEND_URL/api/v1/admin/usage?from=2026-10-01&to=2
 
 ## Validação
 
+A investigação de importações sequenciais iniciada em 18/11/2026 está registrada em [Importação de vários planos de ensino](docs/importacao-planos-ensino.md), com contrato mobile, configuração local, matriz de testes e pendências de execução. Consultar o status desse registro antes de considerar a integração validada.
+
 Ponto inicial do teste real do cache persistente: **01/10/2026**. Usar essa data como início do período nas consultas administrativas e preservar o mesmo documento de teste para a comparação posterior entre `miss` e `hit`.
 
 Cache persistente validado localmente em 24/09/2026: 50 testes unitários/HTTP, typecheck e build aprovados; 8 testes nos emuladores Auth/Firestore aprovados, incluindo concorrência, persistência, expiração, recuperação de reservas, JSON inválido, limite de tamanho e bloqueio de acesso por clientes. Nenhuma chamada real à IA ou escrita no banco de produção foi usada nessa validação. Referências: [transações Firestore](https://firebase.google.com/docs/firestore/manage-data/transactions) e [limites do Firestore](https://firebase.google.com/docs/firestore/quotas).
