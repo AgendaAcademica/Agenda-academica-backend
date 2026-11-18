@@ -40,7 +40,7 @@ export function documentsRouter(extractor: AcademicExtractor, maxMb: number, usa
       let operationId = "";
       let cache = "miss";
       const run: ExtractionRunner = async (cacheState, action) => {
-        const result = await usage.run(res.locals.uid, files.length, files.reduce((sum, file) => sum + file.size, 0), action, cacheState);
+        const result = await usage.run(res.locals.uid, files.length, files.reduce((sum, file) => sum + file.size, 0), action, cacheState, res.locals.unlimitedUserUsage === true);
         operationId = result.operationId;
         cache = result.cache;
         return result.data;
