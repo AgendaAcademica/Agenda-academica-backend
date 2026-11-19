@@ -18,13 +18,19 @@ const upload = (app: ReturnType<typeof createApp>, token = "user-a") => request(
   .set("Authorization", `Bearer ${token}`).attach("file", files[0]!.buffer, { filename: "test.pdf", contentType: "application/pdf" });
 
 describe("authentication, quotas and reports", () => {
-  it("rejects missing, expired and unauthorized credentials before processing", async () => {
+  it("rejects missing and expired credentials before processing", async () => {
     const extractor = { extractDocuments: vi.fn().mockResolvedValue(data) };
     const app = createApp(env, extractor, testSecurity());
     expect((await request(app).post("/api/v1/documents/extract")).status).toBe(401);
     expect((await upload(app, "expired")).status).toBe(401);
-    expect((await upload(app, "outsider")).status).toBe(403);
     expect(extractor.extractDocuments).not.toHaveBeenCalled();
+  });
+  it("allows any authenticated account, including a new user and an administrator", async () => {
+    const extractor = { extractDocuments: vi.fn().mockResolvedValue(data) };
+    const app = createApp(env, extractor, testSecurity());
+    expect((await upload(app, "new-user")).status).toBe(200);
+    expect((await upload(app, "admin")).status).toBe(200);
+    expect(extractor.extractDocuments).toHaveBeenCalledTimes(2);
   });
   it("uses verified UID, not client identity, and restricts reports to administrators", async () => {
     const security = testSecurity();
@@ -110,10 +116,14 @@ describe("authentication, quotas and reports", () => {
       .attach("files", image, { filename: "2.png", contentType: "image/png" });
     expect(response.status).toBe(413); expect(extractor.extractDocuments).not.toHaveBeenCalled();
   });
-  it("requires release access lists and prices", () => {
+  it("requires release administrators and prices without a tester list", () => {
     const prod = loadEnv({ NODE_ENV: "production" });
-    expect(() => loadUsageConfig(prod, { FIREBASE_PROJECT_ID: "test" })).toThrow("TESTER_UIDS");
-    expect(() => loadUsageConfig(prod, { FIREBASE_PROJECT_ID: "test", TESTER_UIDS: "a", ADMIN_UIDS: "b" })).toThrow("tarifa");
+    expect(() => loadUsageConfig(prod, { FIREBASE_PROJECT_ID: "test" })).toThrow("ADMIN_UIDS");
+    expect(() => loadUsageConfig(prod, { FIREBASE_PROJECT_ID: "test", ADMIN_UIDS: "b" })).toThrow("tarifa");
+    const prices = Object.fromEntries([prod.GEMINI_MODEL, prod.GEMINI_FALLBACK_MODEL].map(model => [
+      `gemini:${model}`, { version: "test", inputUsdPerMillion: 1, cachedInputUsdPerMillion: 1, outputUsdPerMillion: 1 }
+    ]));
+    expect(() => loadUsageConfig(prod, { FIREBASE_PROJECT_ID: "test", ADMIN_UIDS: "b", AI_PRICES_JSON: JSON.stringify(prices) })).not.toThrow();
   });
 });
 

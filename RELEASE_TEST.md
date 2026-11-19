@@ -3,7 +3,8 @@
 ## O que foi implementado
 
 - Token Firebase obrigatório no backend, com validação de revogação/conta desativada antes do upload.
-- Lista de testadores por UID e lista administrativa separada. Lista vazia não libera ninguém.
+- Extração disponível para qualquer usuário autenticado no Firebase do projeto, sem aprovação manual. Relatórios restritos à lista administrativa por UID.
+- Lista opcional `UNLIMITED_USER_EMAILS` isenta e-mails verificados das cotas por usuário, mantendo contabilização, cotas globais e limites de upload/concorrência.
 - Registros persistentes no Firestore antes e depois de cada chamada à IA, incluindo retries e fallback.
 - Tokens de entrada, entrada em cache do provedor, saída e raciocínio; tarifa e versão utilizadas; custo estimado em USD.
 - Resultado de cache marcado como `hit`; documento com análise em andamento marcado como `shared` (no cache persistente, retorna `SERVER_BUSY` para tentar novamente). O custo da chamada pertence ao usuário que a iniciou.
@@ -23,15 +24,17 @@
 
 2. Configurar credenciais do Firebase Admin **somente no backend**: `GOOGLE_APPLICATION_CREDENTIALS` apontando para um arquivo local protegido ou `FIREBASE_SERVICE_ACCOUNT_JSON` como segredo no Render. A conta de serviço precisa ler usuários do Firebase Authentication e executar leituras/transações do Firestore. Não usar `google-services.json` do Android como credencial Admin.
 
-3. As contas aprovadas para administrador e testador inicial foram registradas em `RELEASE_ADMIN_EMAILS` e `RELEASE_TESTER_EMAILS` no `.env` local, ignorado pelo Git. Ambas precisam existir no Firebase Authentication. Resolver os UIDs com:
+3. Configurar `RELEASE_ADMIN_EMAILS` no `.env` local com os e-mails dos administradores, separados por vírgula. As contas precisam existir no Firebase Authentication. Resolver os UIDs com:
 
    ```powershell
    npm run resolve:accounts
    ```
 
-   Esse comando é somente leitura, não envia e-mails e não cria usuários. Copiar os valores `ADMIN_UIDS` e `TESTER_UIDS` para os segredos/variáveis do Render e para o `.env` local. O administrador não ganha acesso à extração automaticamente; para isso, seu UID também precisaria entrar em `TESTER_UIDS`.
+   Esse comando é somente leitura, não envia e-mails e não cria usuários. Copiar `ADMIN_UIDS` para o Render e o `.env` local. Qualquer usuário autenticado, incluindo administradores, já pode analisar documentos. `TESTER_UIDS` e `RELEASE_TESTER_EMAILS` deixaram de ser utilizados.
 
-4. Preencher `AI_PRICES_JSON` com as tarifas reais da conta, em USD por milhão de tokens, para **todos** os modelos ativos, inclusive fallback. A aplicação bloqueia a inicialização em produção quando faltam tarifas ou listas de acesso. Não foram inventados preços nem assumido plano gratuito.
+   Para isentar a equipe das cotas por usuário, configurar `UNLIMITED_USER_EMAILS=email1@exemplo.com,email2@exemplo.com` no ambiente onde a API executa. Espaços e maiúsculas/minúsculas são normalizados; a lista vazia não concede isenções. O e-mail precisa estar verificado (`email_verified=true`) no ID token Firebase; cabeçalhos e campos enviados pelo cliente não concedem a isenção. Após verificar o e-mail, renovar o login no app. A lista não concede acesso ao relatório.
+
+4. Preencher `AI_PRICES_JSON` com as tarifas reais da conta, em USD por milhão de tokens, para **todos** os modelos ativos, inclusive fallback. A aplicação bloqueia a inicialização em produção quando faltam tarifas ou `ADMIN_UIDS`. Não foram inventados preços nem assumido plano gratuito.
 
    Estrutura de cada entrada: chave `gemini:NOME_DO_MODELO` ou `openai:NOME_DO_MODELO`, valor com `version` (identificador/data da tarifa), `inputUsdPerMillion`, `cachedInputUsdPerMillion` e `outputUsdPerMillion` (números não negativos). Exemplo apenas de formato em `.env.example`; nenhum valor de exemplo deve ser interpretado como preço real.
 
@@ -74,7 +77,7 @@ Somente o Admin SDK do backend acessa a coleção. As regras atuais já negam ac
 | `MAX_UPLOAD_TOTAL_MB` | 20 MB por envio, até 10 arquivos |
 | `MAX_CONCURRENT_EXTRACTIONS` | 2 por processo |
 
-Somente requisições que iniciam uma nova análise consomem a cota diária de requisições, inclusive se a IA falhar. Respostas do cache e envios que encontram uma análise em andamento ficam no histórico, mas não consomem essa cota. O cache pode ser atendido com a cota diária esgotada. Todos os envios válidos continuam sujeitos ao limite por minuto. Contadores anteriores à mudança não são recalculados. Retries/fallback consomem a cota de tentativas, sem consumir outra cota de requisição. As cotas e o cache persistente são compartilhados por todas as instâncias do mesmo banco; as cotas viram à meia-noite UTC. O limite geral de concorrência continua local a cada processo.
+Somente requisições que iniciam uma nova análise consomem a cota diária de requisições, inclusive se a IA falhar. Respostas do cache e envios que encontram uma análise em andamento ficam no histórico, mas não consomem essa cota. O cache pode ser atendido com a cota diária esgotada. Usuários comuns continuam sujeitos ao limite por minuto. E-mails verificados em `UNLIMITED_USER_EMAILS` são isentos dos quatro limites por usuário (requisições diárias, requisições por minuto, tentativas de IA e custo diário), incluindo retries/fallback. Seus envios e custos continuam registrados e contabilizados nos limites globais; a isenção não garante disponibilidade nem remove cotas do provedor, limites de arquivo ou concorrência. Remover um e-mail da lista restaura os limites usando os contadores existentes. Reiniciar a API após alterar a lista. Contadores anteriores à mudança não são recalculados. Retries/fallback consomem a cota de tentativas, sem consumir outra cota de requisição. As cotas e o cache persistente são compartilhados por todas as instâncias do mesmo banco; as cotas viram à meia-noite UTC. O limite geral de concorrência continua local a cada processo.
 
 **Limites em USD são bloqueios baseados no custo conhecido, não garantias de teto da fatura.** Uma chamada já iniciada pode ultrapassar o valor restante; chamadas paralelas e custos desconhecidos podem aumentar essa diferença. As cotas de quantidade continuam limitando admissões atomicamente. Para testar um teto monetário estrito seria necessária reserva conservadora de orçamento antes da chamada e conciliação do consumo desconhecido. Configure também os controles disponíveis na conta do provedor. Hospedagem, Firestore, impostos, câmbio e créditos não entram neste custo estimado de IA.
 
@@ -109,6 +112,6 @@ powershell -File scripts/test-emulators.ps1
 
 Os testes unitários simulam somente a rede dos provedores, sem gastar créditos. Os testes de emulador verificam concorrência transacional, persistência ao recriar o adaptador, liquidação idempotente, validação de token/conta desativada e negação de leitura/escrita por clientes nas coleções do backend. `npm test` exclui `dist` e os testes que exigem emulador.
 
-Antes de distribuir a release: importar um documento pequeno com o testador aprovado, conferir UID/tokens/custo no relatório administrativo, repetir o mesmo arquivo para conferir o cache, reiniciar o backend e verificar que o histórico permanece. Conferir também HTTP 401 sem token e 403 com uma conta fora da lista. Essa etapa real depende das credenciais e tarifas; não é substituída pelos testes locais.
+Antes de distribuir a release: importar um documento pequeno com um usuário autenticado, conferir UID/tokens/custo no relatório administrativo, repetir o mesmo arquivo para conferir o cache, reiniciar o backend e verificar que o histórico permanece. Conferir também HTTP 401 sem token, extração por uma conta recém-cadastrada e HTTP 403 no relatório com uma conta fora de `ADMIN_UIDS`. Verificar isenção somente para e-mail listado e verificado e manter as cotas globais para essas contas. Essa etapa real depende das credenciais e tarifas; não é substituída pelos testes locais.
 
 Referências de contabilização: [tokens Gemini, incluindo raciocínio](https://ai.google.dev/gemini-api/docs/generate-content/tokens), [tokens de raciocínio OpenAI](https://developers.openai.com/api/docs/guides/reasoning) e [verificação de ID tokens Firebase](https://firebase.google.com/docs/auth/admin/verify-id-tokens).

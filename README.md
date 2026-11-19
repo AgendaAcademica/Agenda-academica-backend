@@ -2,7 +2,7 @@
 
 API Node.js/TypeScript que recebe PDFs ou imagens acadêmicas (JPEG, PNG e WebP), processa com Gemini ou OpenAI e devolve disciplina e eventos em JSON estruturado. Os arquivos permanecem somente em memória. Resultados repetidos são mantidos em cache temporário pelo hash do conteúdo.
 
-A extração exige ID token Firebase de um testador autorizado. Consumo e cotas são registrados pelo backend no Firestore. Consulte [RELEASE_TEST.md](RELEASE_TEST.md) para configurar credenciais Admin, usuários, preços e consultar o relatório. A configuração abaixo de IA é apenas parte dos requisitos de deploy.
+A extração aceita qualquer usuário autenticado com ID token Firebase válido, sem aprovação manual por UID. Consumo e cotas são registrados pelo backend no Firestore. E-mails verificados em `UNLIMITED_USER_EMAILS` ficam isentos das cotas por usuário; limites globais, do provedor e de upload continuam aplicáveis. Consulte [RELEASE_TEST.md](RELEASE_TEST.md) para configurar credenciais Admin, usuários, preços e consultar o relatório. A configuração abaixo de IA é apenas parte dos requisitos de deploy.
 
 ## Deploy no Render
 
@@ -31,7 +31,7 @@ O Render fornece `PORT` automaticamente. A API escuta em `0.0.0.0`, compila o Ty
 | `FIRESTORE_DATABASE_ID` | Não | `(default)` | Banco Firestore usado pelo backend. |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Localmente | — | Caminho para a conta de serviço Firebase Admin. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | No Render | — | JSON completo da conta de serviço, armazenado como segredo. |
-| `TESTER_UIDS` | Sim em produção | — | UIDs autorizados a extrair documentos, separados por vírgula. |
+| `UNLIMITED_USER_EMAILS` | Não | Vazia | E-mails verificados isentos das cotas por usuário, separados por vírgula. Limites globais continuam ativos. |
 | `ADMIN_UIDS` | Sim em produção | — | UIDs autorizados a consultar o relatório, separados por vírgula. |
 | `AI_PRICES_JSON` | Sim em produção | `{}` | Tarifas dos modelos ativos; formato detalhado em `RELEASE_TEST.md`. |
 | `AI_DOCUMENT_CACHE_TTL_DAYS` | Não | `30` | Validade do JSON extraído no cache persistente Firestore, compartilhado entre usuários autorizados. |
@@ -50,13 +50,15 @@ O Render fornece `PORT` automaticamente. A API escuta em `0.0.0.0`, compila o Ty
 
 ## Desenvolvimento local
 
+Para o passo a passo no Windows/PowerShell, incluindo configuração do `.env` e solução de erros de Node.js/npm, consulte [EXECUTAR_BACKEND.md](EXECUTAR_BACKEND.md).
+
 Requer Node.js 20 ou superior.
 
 ```powershell
 npm ci
 Copy-Item .env.example .env
 # escolha AI_PROVIDER, preencha a chave correspondente, as credenciais Firebase
-# Admin, TESTER_UIDS/ADMIN_UIDS e as tarifas dos modelos ativos
+# Admin, ADMIN_UIDS, UNLIMITED_USER_EMAILS (opcional) e as tarifas dos modelos ativos
 npm run dev
 ```
 

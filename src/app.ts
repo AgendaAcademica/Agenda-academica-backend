@@ -11,7 +11,7 @@ import type { UsageService } from "./usage/meter.js";
 import { HttpError } from "./usage/types.js";
 import { usageRouter } from "./routes/usage.routes.js";
 
-export type AppSecurity = { verifyToken: VerifyToken; testers: Set<string>; admins: Set<string>; usage: UsageService;
+export type AppSecurity = { verifyToken: VerifyToken; unlimitedEmails: Set<string>; admins: Set<string>; usage: UsageService;
   maxConcurrentExtractions: number; maxUploadTotalMb: number };
 export function createApp(env: Env, extractor: AcademicExtractor, security: AppSecurity) {
   const app = express();
@@ -29,7 +29,7 @@ export function createApp(env: Env, extractor: AcademicExtractor, security: AppS
       credentialsConfigured: env.AI_PROVIDER === "openai" ? Boolean(env.OPENAI_API_KEY) : Boolean(env.GEMINI_API_KEY)
     }
   }));
-  app.use("/api/v1/documents", authenticate(security.verifyToken, security.testers),
+  app.use("/api/v1/documents", authenticate(security.verifyToken, undefined, security.unlimitedEmails),
     concurrencyLimit(security.maxConcurrentExtractions), documentsRouter(extractor, env.MAX_PDF_SIZE_MB, security.usage, security.maxUploadTotalMb));
   app.use("/api/v1/admin/usage", authenticate(security.verifyToken, security.admins), usageRouter(security.usage.store));
   app.use((_request, response) => response.status(404).json({ error: "Rota não encontrada." }));
