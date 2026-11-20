@@ -4,6 +4,7 @@ import helmet from "helmet";
 import multer from "multer";
 import { ZodError } from "zod";
 import type { Env } from "./config/env.js";
+import { DOCUMENT_UPLOAD_LIMIT_MESSAGE, MAX_DOCUMENTS_PER_UPLOAD } from "./config/upload.js";
 import { documentsRouter } from "./routes/documents.routes.js";
 import { getApiStatus, type AcademicExtractor } from "./services/academic-extractor.js";
 import { authenticate, concurrencyLimit, type VerifyToken } from "./usage/auth.js";
@@ -75,8 +76,12 @@ export function createApp(env: Env, extractor: AcademicExtractor, security: AppS
       response.status(502).json({ error: "A inteligência artificial retornou dados fora do formato esperado." });
       return;
     }
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_COUNT") {
+      response.status(400).json({ error: DOCUMENT_UPLOAD_LIMIT_MESSAGE, code: "TOO_MANY_FILES", maxFiles: MAX_DOCUMENTS_PER_UPLOAD, retryable: false });
+      return;
+    }
     if (error instanceof multer.MulterError) {
-      response.status(400).json({ error: "Envio inválido. Use até dez arquivos nos campos file ou files.", code: "INVALID_UPLOAD" });
+      response.status(400).json({ error: `Envio inválido. Use até ${MAX_DOCUMENTS_PER_UPLOAD} documentos nos campos file ou files.`, code: "INVALID_UPLOAD" });
       return;
     }
     response.status(502).json({ error: "Não foi possível processar o documento com a inteligência artificial." });

@@ -61,11 +61,12 @@ function setup(options: { limits?: Partial<UsageLimits>; maxFileMb?: number; max
     const files = body.contents.flatMap(content => content.parts).flatMap(part => part.inlineData
       ? [{ buffer: Buffer.from(part.inlineData.data, "base64"), mimeType: part.inlineData.mimeType }] : []);
     providerFiles.push(files);
-    let data: ExtractedDocument;
-    if (files.length > 0 && files.every(file => file.mimeType === "image/png")) data = algebraData;
-    else if (files.length === 1 && files[0]!.buffer.includes(Buffer.from("Disciplina: Algebra Linear"))) data = algebraData;
-    else if (files.length === 1 && files[0]!.buffer.includes(Buffer.from("Disciplina: Banco de Dados"))) data = databasesData;
-    else throw new Error("Unexpected fixture sent to the provider");
+    const disciplines = files.flatMap(file => {
+      if (file.mimeType === "image/png" || file.buffer.includes(Buffer.from("Disciplina: Algebra Linear"))) return algebraData.disciplines;
+      if (file.buffer.includes(Buffer.from("Disciplina: Banco de Dados"))) return databasesData.disciplines;
+      throw new Error("Unexpected fixture sent to the provider");
+    });
+    const data: ExtractedDocument = { disciplines: [...new Map(disciplines.map(discipline => [discipline.disciplineCode, discipline])).values()] };
     return new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text: JSON.stringify(data) }] } }],
       usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }), { status: 200 });
   });
@@ -136,15 +137,28 @@ describe("sequential PDF imports through the HTTP and provider adapters", () => 
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each(["PDF", "imagem"])("rejects a PDF accompanied by another %s before accounting", async kind => {
-    const { app, store, fetch } = setup();
+  it.each(["PDF", "imagem"])("accepts a PDF accompanied by another %s in one accounted operation", async kind => {
+    const { app, store, fetch, providerFiles } = setup();
     const response = await request(app).post("/api/v1/documents/extract").set("Authorization", "Bearer user-a")
       .attach("files", algebra, { filename: "algebra.pdf", contentType: "application/pdf" })
       .attach("files", kind === "PDF" ? databases : png, { filename: kind === "PDF" ? "banco.pdf" : "pagina.png", contentType: kind === "PDF" ? "application/pdf" : "image/png" });
-    expect(response.status).toBe(415);
-    expect(response.body).toEqual({ error: "O envio múltiplo aceita somente imagens." });
-    expect(store.operations.size).toBe(0);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual(kind === "PDF"
+      ? { disciplines: [...algebraData.disciplines, ...databasesData.disciplines] } : algebraData);
+    expect(response.body.meta).toMatchObject({ filesCount: 2, mimeType: "multipart/documents" });
+    expect(providerFiles).toEqual([[{ buffer: algebra, mimeType: "application/pdf" },
+      { buffer: kind === "PDF" ? databases : png, mimeType: kind === "PDF" ? "application/pdf" : "image/png" }]]);
+    expect(operations(store)).toEqual([expect.objectContaining({ status: "success", filesCount: 2,
+      totalBytes: algebra.length + (kind === "PDF" ? databases.length : png.length) })]);
+    expect(store.attempts.size).toBe(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const cached = await request(app).post("/api/v1/documents/extract").set("Authorization", "Bearer user-a")
+      .attach("files", algebra, { filename: "renomeado.pdf", contentType: "application/pdf" })
+      .attach("files", kind === "PDF" ? databases : png, { filename: kind === "PDF" ? "outro.pdf" : "outra.png", contentType: kind === "PDF" ? "application/pdf" : "image/png" });
+    expect(cached.status).toBe(200);
+    expect(cached.body.data).toEqual(response.body.data);
+    expect(cached.body.meta.cache).toBe("hit");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("keeps joint analysis of ten image pages in one operation and rejects an eleventh", async () => {
@@ -161,7 +175,7 @@ describe("sequential PDF imports through the HTTP and provider adapters", () => 
     expect(providerFiles[0]).toEqual(Array.from({ length: 10 }, () => ({ buffer: png, mimeType: "image/png" })));
     const tooMany = await pages(11);
     expect(tooMany.status).toBe(400);
-    expect(tooMany.body).toEqual({ error: "Envio inválido. Use até dez arquivos nos campos file ou files.", code: "INVALID_UPLOAD" });
+    expect(tooMany.body).toEqual({ error: "Você pode enviar no máximo 10 documentos por vez.", code: "TOO_MANY_FILES", maxFiles: 10, retryable: false });
     expect(store.operations.size).toBe(1);
     expect(store.attempts.size).toBe(1);
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -175,18 +189,17 @@ describe("upload size boundaries", () => {
     expect(config.MAX_CONCURRENT_EXTRACTIONS).toBe(2);
   });
 
-  it("accepts a PDF below the file limit and rejects the boundary and excess without quota", async () => {
+  it("accepts a PDF up to the file limit and rejects the excess without quota", async () => {
     const { app, store, fetch } = setup({ maxFileMb: 1 / 1024, maxTotalMb: 2 / 1024 });
     expect((await upload(app, pad(algebra, 1023))).status).toBe(200);
-    for (const size of [1024, 1025]) {
-      const response = await upload(app, pad(databases, size));
-      expect(response.status).toBe(413);
-      expect(response.body).toEqual({ error: "O arquivo excede o limite de 0.0009765625 MB." });
-    }
-    expect(store.operations.size).toBe(1);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect((await upload(app, databases)).status).toBe(200);
+    expect((await upload(app, pad(databases, 1024))).status).toBe(200);
+    const response = await upload(app, pad(databases, 1025));
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({ error: "O arquivo excede o limite de 0.0009765625 MB." });
     expect(store.operations.size).toBe(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((await upload(app, databases)).status).toBe(200);
+    expect(store.operations.size).toBe(3);
   });
 
   it("accepts exactly the total limit and rejects its excess even when each image fits", async () => {
