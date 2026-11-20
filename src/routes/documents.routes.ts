@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { MAX_DOCUMENTS_PER_UPLOAD } from "../config/upload.js";
 import { CachedAcademicExtractor, type AcademicExtractor, type ExtractionRunner } from "../services/academic-extractor.js";
 import type { UsageService } from "../usage/meter.js";
 import { boundedMemoryStorage } from "./upload-storage.js";
@@ -17,22 +18,18 @@ function hasValidSignature(buffer: Buffer, mimeType: string): boolean {
 
 export function documentsRouter(extractor: AcademicExtractor, maxMb: number, usage: UsageService, maxTotalMb: number): Router {
   const router = Router();
-  const upload = multer({ storage: boundedMemoryStorage(Math.floor(maxTotalMb * 1024 * 1024)), limits: { fileSize: Math.floor(maxMb * 1024 * 1024), files: 10, fields: 0, parts: 11 } });
+  const upload = multer({ storage: boundedMemoryStorage(Math.floor(maxTotalMb * 1024 * 1024)), limits: { fileSize: Math.floor(maxMb * 1024 * 1024), files: MAX_DOCUMENTS_PER_UPLOAD, fields: 0, parts: MAX_DOCUMENTS_PER_UPLOAD + 1 } });
 
-  router.post("/extract", upload.fields([{ name: "file", maxCount: 1 }, { name: "files", maxCount: 10 }]), async (req, res, next) => {
+  router.post("/extract", upload.fields([{ name: "file", maxCount: MAX_DOCUMENTS_PER_UPLOAD }, { name: "files", maxCount: MAX_DOCUMENTS_PER_UPLOAD }]), async (req, res, next) => {
     try {
       const grouped = (req.files ?? {}) as Record<string, Express.Multer.File[]>;
       const files = [...(grouped.file ?? []), ...(grouped.files ?? [])];
       if (files.length === 0) {
-        res.status(400).json({ error: "Envie um PDF ou imagem no campo 'file'." });
+        res.status(400).json({ error: `Envie de 1 a ${MAX_DOCUMENTS_PER_UPLOAD} documentos PDF ou imagens nos campos 'file' ou 'files'.` });
         return;
       }
       if (files.some(file => !supportedMimeTypes.has(file.mimetype) || !hasValidSignature(file.buffer, file.mimetype))) {
         res.status(415).json({ error: "O arquivo deve ser um PDF, JPEG, PNG ou WebP válido." });
-        return;
-      }
-      if (files.length > 1 && files.some(file => !file.mimetype.startsWith("image/"))) {
-        res.status(415).json({ error: "O envio múltiplo aceita somente imagens." });
         return;
       }
       res.locals.processingExtraction = true;
@@ -49,7 +46,9 @@ export function documentsRouter(extractor: AcademicExtractor, maxMb: number, usa
         ? await extractor.extractDocuments(academicFiles, run)
         : await run("miss", () => extractor.extractDocuments(academicFiles));
       const eventsCount = data.disciplines.reduce((sum, discipline) => sum + discipline.events.length, 0);
-      res.json({ data, meta: { operationId, cache, fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, disciplinesCount: data.disciplines.length, eventsCount, mimeType: files.length === 1 ? files[0]!.mimetype : "multipart/images" } });
+      const mimeType = files.length === 1 ? files[0]!.mimetype
+        : files.every(file => file.mimetype.startsWith("image/")) ? "multipart/images" : "multipart/documents";
+      res.json({ data, meta: { operationId, cache, fileName: files.map(file => file.originalname).join(", "), fileSize: files.reduce((sum, file) => sum + file.size, 0), filesCount: files.length, disciplinesCount: data.disciplines.length, eventsCount, mimeType } });
     } catch (error) {
       next(error);
     } finally {

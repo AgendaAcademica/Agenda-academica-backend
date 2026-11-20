@@ -79,10 +79,13 @@ Enquanto a OpenAI estiver inativa, mantenha `AI_PROVIDER=gemini` e `AI_FALLBACK_
 - `POST /api/v1/documents/extract`
 - `GET /api/v1/admin/usage?from=YYYY-MM-DD&to=YYYY-MM-DD&format=json|csv` (ID token de administrador)
 
-O endpoint de extração usa `multipart/form-data`: `file` para um PDF ou imagem; ou `files` para até dez imagens da mesma disciplina.
+O endpoint de extração usa `multipart/form-data` e aceita de 1 a 10 documentos por envio, entre PDFs e imagens JPEG, PNG ou WebP, inclusive misturados. Repita o campo `files` para múltiplos documentos; `file` também é aceito. O limite de 10 considera a soma dos dois campos.
+
+Os arquivos são analisados juntos, com as disciplinas retornadas em `data.disciplines`. Acima de 10, a API retorna HTTP 400 com código `TOO_MANY_FILES` e o aviso **“Você pode enviar no máximo 10 documentos por vez.”**, sem iniciar a análise. Os limites de tamanho por arquivo e por envio continuam aplicáveis. O [contrato de importação para o Android](docs/importacao-planos-ensino.md) detalha limites, cotas e tratamento de erros.
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/documents/extract -H "Authorization: Bearer $FIREBASE_ID_TOKEN" -F "file=@plano-de-ensino.pdf"
+curl -X POST http://localhost:3000/api/v1/documents/extract -H "Authorization: Bearer $FIREBASE_ID_TOKEN" -F "files=@plano-calculo.pdf" -F "files=@plano-fisica.pdf"
 curl -X POST http://localhost:3000/api/v1/documents/extract -H "Authorization: Bearer $FIREBASE_ID_TOKEN" -F "files=@pagina-1.png" -F "files=@pagina-2.png"
 ```
 
