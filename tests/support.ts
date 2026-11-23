@@ -1,6 +1,9 @@
 import { HttpError, type Attempt, type Operation, type UsageLimits, type UsageStore } from "../src/usage/types.js";
 import { UsageService } from "../src/usage/meter.js";
 import type { AppSecurity } from "../src/app.js";
+import { MemoryDisciplinePlanStore } from "../src/plan/memory-plan-store.js";
+
+export { MemoryDisciplinePlanStore };
 
 export const limits: UsageLimits = { userDailyRequests: 20, globalDailyRequests: 200, userRequestsPerMinute: 3,
   userDailyAttempts: 40, globalDailyAttempts: 400, userDailyUsd: 1, globalDailyUsd: 10 };
@@ -34,8 +37,14 @@ export class MemoryUsageStore implements UsageStore {
   async report(from: string, to: string) { return { operations: [...this.operations.values()].filter(x => x.createdAt >= from && x.createdAt < to),
     attempts: [...this.attempts.values()].filter(x => x.createdAt >= from && x.createdAt < to) }; }
 }
-export function testSecurity(store = new MemoryUsageStore()): AppSecurity {
-  return { verifyToken: async token => { if (token === "expired") throw { code: "auth/id-token-expired" }; return { uid: token }; },
+export function testSecurity(
+  store = new MemoryUsageStore(),
+  planStore = new MemoryDisciplinePlanStore()
+): AppSecurity {
+  return {
+    verifyToken: async token => { if (token === "expired") throw { code: "auth/id-token-expired" }; return { uid: token }; },
     unlimitedEmails: new Set(), admins: new Set(["admin"]), maxConcurrentExtractions: 2, maxUploadTotalMb: 1,
-    usage: new UsageService(store, limits, { "gemini:test": { version: "test-only", inputUsdPerMillion: 1, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 2 } }) };
+    usage: new UsageService(store, limits, { "gemini:test": { version: "test-only", inputUsdPerMillion: 1, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 2 } }),
+    planStore
+  };
 }
