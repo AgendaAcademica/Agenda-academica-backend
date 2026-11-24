@@ -1,8 +1,11 @@
 import { z } from "zod";
 export const activityTypes=["AULA","PROVA","TRABALHO","EXERCICIO","SEMINARIO","PROJETO","LEITURA","PRAZO_ENTREGA","EVENTO"] as const;
+export type ActivityType = (typeof activityTypes)[number];
 export const priorities=["BAIXA","MEDIA","ALTA","URGENTE"] as const;
+export type Priority = (typeof priorities)[number];
 const date=/^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/;const time=/^([01]\d|2[0-3]):[0-5]\d$/;
 export const extractedEventSchema=z.object({title:z.string().min(1),date:z.string().regex(date),time:z.union([z.string().regex(time),z.literal("")]).default(""),activityType:z.enum(activityTypes),priority:z.enum(priorities),description:z.string().default(""),dueDate:z.string().regex(date).nullable().default(null)});
+export type ExtractedEvent = z.infer<typeof extractedEventSchema>;
 export const extractedSyllabusSchema=z.object({documentTitle:z.string().min(1),disciplineName:z.string().min(1),disciplineCode:z.string().default(""),professor:z.string().default(""),term:z.string().default(""),classroom:z.string().default(""),schedule:z.string().default(""),recommendedColorHex:z.string().regex(/^#[0-9A-Fa-f]{6}$/).default("#2563EB"),events:z.array(extractedEventSchema).default([])});
 export type ExtractedSyllabus=z.infer<typeof extractedSyllabusSchema>;
 export const extractedDocumentSchema=z.object({disciplines:z.array(extractedSyllabusSchema).min(1)});

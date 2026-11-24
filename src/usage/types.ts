@@ -28,7 +28,12 @@ export interface UsageStore {
   report(from: string, to: string): Promise<Report>;
 }
 export class HttpError extends Error {
-  constructor(public readonly status: number, public readonly code: string, message: string) { super(message); }
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: Record<string, unknown>
+  ) { super(message); }
 }
 export class AccountingError extends HttpError {
   constructor() { super(503, "ACCOUNTING_UNAVAILABLE", "O registro de consumo está indisponível. Tente novamente mais tarde."); }

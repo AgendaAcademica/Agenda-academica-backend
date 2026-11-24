@@ -81,6 +81,57 @@ function upload(app: ReturnType<typeof createApp>, buffer: Buffer, filename = "p
 const operations = (store: MemoryUsageStore) => [...store.operations.values()];
 const attempts = (store: MemoryUsageStore) => [...store.attempts.values()];
 const pad = (buffer: Buffer, size: number) => Buffer.concat([buffer, Buffer.alloc(size - buffer.length, 0x20)]);
+function previewOf(doc: ExtractedDocument) {
+  return {
+    status: "PENDING_CONFIRMATION",
+    termScope: "2026/2",
+    quota: {
+      limit: 6,
+      used: 0,
+      remaining: 6,
+      isUnlimited: false,
+      term: "2026/2",
+      selectionRequired: false
+    },
+    disciplines: doc.disciplines.map(d => ({
+      selectionId: expect.stringMatching(/^disc_[a-f0-9]{16}$/),
+      disciplineKey: `2026/2::CODE::${d.disciplineCode}`,
+      documentTitle: d.documentTitle,
+      disciplineName: d.disciplineName,
+      disciplineCode: d.disciplineCode,
+      term: d.term,
+      professor: d.professor,
+      classroom: d.classroom,
+      schedule: d.schedule,
+      parsedSchedule: { daysOfWeek: [], timeRanges: [] },
+      recommendedColorHex: d.recommendedColorHex,
+      consolidation: {
+        status: "SINGLE",
+        mergedSourcesCount: 1,
+        ambiguous: false,
+        ambiguityReason: null,
+        candidateKeys: []
+      },
+      activities: {
+        hasExtractedActivities: d.events.length > 0,
+        totalCount: d.events.length,
+        evaluativeCount: d.events.filter(e => e.activityType !== "AULA").length,
+        countsByType: Object.fromEntries(
+          [...new Set(d.events.map(e => e.activityType))].map(type => [
+            type,
+            d.events.filter(e => e.activityType === type).length
+          ])
+        )
+      },
+      quotaEligibility: {
+        eligibleForFull: d.events.length > 0,
+        alreadyCountedInQuota: false,
+        previouslyConfirmedMode: null,
+        quotaCostIfSelected: d.events.length > 0 ? 1 : 0
+      }
+    }))
+  };
+}
 
 beforeEach(() => {
   // Freeze only Date: HTTP and SDK timers must continue to run normally.
@@ -96,7 +147,8 @@ describe("sequential PDF imports through the HTTP and provider adapters", () => 
     const second = await upload(app, databases);
     for (const [response, buffer, data] of [[first, algebra, algebraData], [second, databases, databasesData]] as const) {
       expect(response.status).toBe(200);
-      expect(response.body.data).toEqual(data);
+      expect(response.body.analysisId).toBe(response.body.meta.operationId);
+      expect(response.body.data).toEqual(previewOf(data));
       expect(response.body.meta).toEqual({ operationId: expect.any(String), cache: "miss", fileName: "plano.pdf",
         fileSize: buffer.length, filesCount: 1, disciplinesCount: 1, eventsCount: 1, mimeType: "application/pdf" });
     }
@@ -120,8 +172,8 @@ describe("sequential PDF imports through the HTTP and provider adapters", () => 
     expect(attempts(store)).toHaveLength(1);
     const corrected = await upload(app, databases, "banco-de-dados.pdf");
     expect(corrected.status).toBe(200);
-    expect(corrected.body.data).toEqual(databasesData);
-    expect(first.body.data).toEqual(algebraData);
+    expect(corrected.body.data).toEqual(previewOf(databasesData));
+    expect(first.body.data).toEqual(previewOf(algebraData));
     expect(operations(store).map(op => op.status)).toEqual(["success", "success"]);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(providerFiles[1]).toEqual([{ buffer: databases, mimeType: "application/pdf" }]);
@@ -143,8 +195,8 @@ describe("sequential PDF imports through the HTTP and provider adapters", () => 
       .attach("files", algebra, { filename: "algebra.pdf", contentType: "application/pdf" })
       .attach("files", kind === "PDF" ? databases : png, { filename: kind === "PDF" ? "banco.pdf" : "pagina.png", contentType: kind === "PDF" ? "application/pdf" : "image/png" });
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual(kind === "PDF"
-      ? { disciplines: [...algebraData.disciplines, ...databasesData.disciplines] } : algebraData);
+    expect(response.body.data).toEqual(previewOf(kind === "PDF"
+      ? { disciplines: [...algebraData.disciplines, ...databasesData.disciplines] } : algebraData));
     expect(response.body.meta).toMatchObject({ filesCount: 2, mimeType: "multipart/documents" });
     expect(providerFiles).toEqual([[{ buffer: algebra, mimeType: "application/pdf" },
       { buffer: kind === "PDF" ? databases : png, mimeType: kind === "PDF" ? "application/pdf" : "image/png" }]]);
@@ -170,7 +222,7 @@ describe("sequential PDF imports through the HTTP and provider adapters", () => 
     };
     const response = await pages(10);
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual(algebraData);
+    expect(response.body.data).toEqual(previewOf(algebraData));
     expect(response.body.meta).toMatchObject({ filesCount: 10, fileSize: png.length * 10, mimeType: "multipart/images" });
     expect(providerFiles[0]).toEqual(Array.from({ length: 10 }, () => ({ buffer: png, mimeType: "image/png" })));
     const tooMany = await pages(11);
@@ -241,7 +293,7 @@ describe("quota consumption and isolated retries", () => {
     vi.setSystemTime(Date.now() + Number(blocked.headers["retry-after"]) * 1000);
     const resumed = await upload(app, fourth);
     expect(resumed.status).toBe(200);
-    expect(resumed.body.data).toEqual(databasesData);
+    expect(resumed.body.data).toEqual(previewOf(databasesData));
     expect(resumed.body.meta.cache).toBe("miss");
     expect(operations(store).map(op => op.status)).toEqual(["success", "success", "success", "success"]);
     expect(fetch).toHaveBeenCalledTimes(4);
@@ -268,9 +320,9 @@ describe("quota consumption and isolated retries", () => {
     vi.setSystemTime(new Date("2026-11-19T00:00:00.000Z"));
     const retried = await upload(app, databases, "banco.pdf", token);
     expect(retried.status).toBe(200);
-    expect(retried.body.data).toEqual(databasesData);
+    expect(retried.body.data).toEqual(previewOf(databasesData));
     expect(retried.body.meta.cache).toBe("miss");
-    expect(first.body.data).toEqual(algebraData);
+    expect(first.body.data).toEqual(previewOf(algebraData));
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -280,7 +332,7 @@ describe("quota consumption and isolated retries", () => {
     for (const filename of ["renomeado.pdf", "mais-uma-tentativa.pdf"]) {
       const repeated = await upload(app, algebra, filename);
       expect(repeated.status).toBe(200);
-      expect(repeated.body.data).toEqual(algebraData);
+      expect(repeated.body.data).toEqual(previewOf(algebraData));
       expect(repeated.body.meta).toMatchObject({ cache: "hit", fileName: filename });
       expect(repeated.body.meta.operationId).not.toBe(first.body.meta.operationId);
     }
@@ -307,7 +359,7 @@ describe("quota consumption and isolated retries", () => {
     vi.setSystemTime(Date.now() + 30_000);
     const retried = await upload(app, algebra);
     expect(retried.status).toBe(200);
-    expect(retried.body.data).toEqual(algebraData);
+    expect(retried.body.data).toEqual(previewOf(algebraData));
     expect(retried.body.meta.cache).toBe("miss");
     expect(operations(store).map(op => [op.status, op.cache])).toEqual([["error", "miss"], ["success", "miss"]]);
     expect(attempts(store).map(attempt => [attempt.status, attempt.estimatedCostUsd])).toEqual([["error", null], ["error", null], ["success", 0.00002]]);

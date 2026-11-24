@@ -1,5 +1,43 @@
 import "dotenv/config";
 import { z } from "zod";
-const schema=z.object({NODE_ENV:z.enum(["development","test","production"]).default("development"),PORT:z.coerce.number().int().positive().default(3000),AI_PROVIDER:z.enum(["gemini","openai"]).default("gemini"),AI_FALLBACK_PROVIDER:z.enum(["none","gemini","openai"]).default("none"),GEMINI_API_KEY:z.string().min(1).optional(),GEMINI_MODEL:z.string().min(1).default("gemini-3.5-flash"),GEMINI_FALLBACK_MODEL:z.string().min(1).default("gemini-3.5-flash-lite"),OPENAI_API_KEY:z.string().min(1).optional(),OPENAI_MODEL:z.string().min(1).default("gpt-5-mini"),AI_DOCUMENT_CACHE_TTL_DAYS:z.coerce.number().int().positive().max(365).default(30),AI_CACHE_TTL_MINUTES:z.coerce.number().int().positive().max(10080).default(1440),AI_CACHE_MAX_ENTRIES:z.coerce.number().int().positive().max(10000).default(100),MAX_PDF_SIZE_MB:z.coerce.number().positive().max(50).default(20),CORS_ORIGIN:z.string().default("*")});
-export type Env=z.infer<typeof schema>;
-export function loadEnv(source:NodeJS.ProcessEnv=process.env):Env{return schema.parse(source);}
+
+const basePlanLimitMessage =
+  "BASE_PLAN_DISCIPLINE_LIMIT deve ser um número inteiro positivo maior que zero.";
+
+const basePlanDisciplineLimitSchema = z.preprocess(
+  value => {
+    if (value === undefined) return 6;
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && /^[+-]?\d+(\.\d+)?$/.test(value.trim())) {
+      return Number(value.trim());
+    }
+    return Number.NaN;
+  },
+  z
+    .number({ message: basePlanLimitMessage })
+    .int(basePlanLimitMessage)
+    .positive(basePlanLimitMessage)
+);
+
+const schema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(3000),
+  AI_PROVIDER: z.enum(["gemini", "openai"]).default("gemini"),
+  AI_FALLBACK_PROVIDER: z.enum(["none", "gemini", "openai"]).default("none"),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  GEMINI_MODEL: z.string().min(1).default("gemini-3.5-flash"),
+  GEMINI_FALLBACK_MODEL: z.string().min(1).default("gemini-3.5-flash-lite"),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).default("gpt-5-mini"),
+  AI_DOCUMENT_CACHE_TTL_DAYS: z.coerce.number().int().positive().max(365).default(30),
+  AI_CACHE_TTL_MINUTES: z.coerce.number().int().positive().max(10080).default(1440),
+  AI_CACHE_MAX_ENTRIES: z.coerce.number().int().positive().max(10000).default(100),
+  MAX_PDF_SIZE_MB: z.coerce.number().positive().max(50).default(20),
+  BASE_PLAN_DISCIPLINE_LIMIT: basePlanDisciplineLimitSchema,
+  CORS_ORIGIN: z.string().default("*")
+});
+
+export type Env = z.infer<typeof schema>;
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  return schema.parse(source);
+}

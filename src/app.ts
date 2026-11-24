@@ -11,11 +11,21 @@ import { authenticate, concurrencyLimit, type VerifyToken } from "./usage/auth.j
 import type { UsageService } from "./usage/meter.js";
 import { HttpError } from "./usage/types.js";
 import { usageRouter } from "./routes/usage.routes.js";
+import { MemoryDisciplinePlanStore } from "./plan/memory-plan-store.js";
+import type { DisciplinePlanStore } from "./plan/types.js";
 
-export type AppSecurity = { verifyToken: VerifyToken; unlimitedEmails: Set<string>; admins: Set<string>; usage: UsageService;
-  maxConcurrentExtractions: number; maxUploadTotalMb: number };
+export type AppSecurity = {
+  verifyToken: VerifyToken;
+  unlimitedEmails: Set<string>;
+  admins: Set<string>;
+  usage: UsageService;
+  maxConcurrentExtractions: number;
+  maxUploadTotalMb: number;
+  planStore?: DisciplinePlanStore;
+};
 export function createApp(env: Env, extractor: AcademicExtractor, security: AppSecurity) {
   const app = express();
+  const planStore = security.planStore ?? new MemoryDisciplinePlanStore();
   const origin = env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",").map(value => value.trim());
   app.disable("x-powered-by");
   app.use(helmet());
@@ -30,8 +40,19 @@ export function createApp(env: Env, extractor: AcademicExtractor, security: AppS
       credentialsConfigured: env.AI_PROVIDER === "openai" ? Boolean(env.OPENAI_API_KEY) : Boolean(env.GEMINI_API_KEY)
     }
   }));
-  app.use("/api/v1/documents", authenticate(security.verifyToken, undefined, security.unlimitedEmails),
-    concurrencyLimit(security.maxConcurrentExtractions), documentsRouter(extractor, env.MAX_PDF_SIZE_MB, security.usage, security.maxUploadTotalMb));
+  app.use(
+    "/api/v1/documents",
+    authenticate(security.verifyToken, undefined, security.unlimitedEmails),
+    documentsRouter(
+      extractor,
+      env.MAX_PDF_SIZE_MB,
+      security.usage,
+      security.maxUploadTotalMb,
+      planStore,
+      env.BASE_PLAN_DISCIPLINE_LIMIT,
+      concurrencyLimit(security.maxConcurrentExtractions)
+    )
+  );
   app.use("/api/v1/admin/usage", authenticate(security.verifyToken, security.admins), usageRouter(security.usage.store));
   app.use((_request, response) => response.status(404).json({ error: "Rota não encontrada." }));
 
@@ -43,7 +64,16 @@ export function createApp(env: Env, extractor: AcademicExtractor, security: AppS
         const seconds = daily ? Math.ceil((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) - now.getTime()) / 1000) : 60;
         response.setHeader("Retry-After", String(seconds));
       }
-      response.status(error.status).json({ error: error.message, code: error.code, retryable: error.status === 503 || error.code === "SERVER_BUSY" || error.code === "USER_RATE_LIMIT" });
+      response.status(error.status).json({
+        error: error.message,
+        code: error.code,
+        retryable: error.status === 503 || error.code === "SERVER_BUSY" || error.code === "USER_RATE_LIMIT",
+        ...(error.details ?? {})
+      });
+      return;
+    }
+    if (error instanceof SyntaxError && "status" in error && (error as { status?: unknown }).status === 400) {
+      response.status(400).json({ error: "Corpo JSON inválido.", code: "INVALID_JSON", retryable: false });
       return;
     }
     const upstreamStatus = getApiStatus(error);

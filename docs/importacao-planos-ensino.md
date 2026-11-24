@@ -184,4 +184,34 @@ A suíte completa também cobre extração de PDF único, PNG, análise conjunta
 
 Para a validação de integração real, registrar URL/versão do deploy, data, limites ativos, provedor/modelo e se a conta tem isenção (sem tokens/chaves). Enviar as duas fixtures válidas sequencialmente com uma conta comum, verificar o conteúdo retornado e `operationId`; enviar um PDF inválido e reenviar somente o corrigido; confirmar limites/cotas e os contadores no relatório administrativo. Anexar status, corpo e `Retry-After` observados a esta task. Os doubles locais não comprovam os valores do deploy, as mensagens do Firestore nem a extração semântica da IA real.
 
-Referências de implementação: [rota e validação](../src/routes/documents.routes.ts), [erros HTTP](../src/app.ts), [limite total](../src/routes/upload-storage.ts), [configuração](../src/usage/config.ts), [contabilização](../src/usage/meter.ts), [cotas Firestore](../src/usage/firestore-store.ts), [cache persistente](../src/services/document-cache.ts).
+Referências de implementação: [rota e validação](../src/routes/documents.routes.ts), [erros HTTP](../src/app.ts), [limite total](../src/routes/upload-storage.ts), [configuração](../src/usage/config.ts), [contabilização](../src/usage/meter.ts), [cotas Firestore](../src/usage/firestore-store.ts), [cache persistente](../src/services/document-cache.ts), [consolidação de disciplinas](../src/services/discipline-consolidation.ts), [controle do plano base](../src/plan/firestore-plan-store.ts).
+
+## Limite de disciplinas no plano base e seleção pós-análise
+
+### Visão geral do fluxo em duas fases (RF04 + RF05)
+
+1. **`POST /api/v1/documents/extract`** processa integralmente os arquivos enviados (até 10 documentos), consolida disciplinas equivalentes por código (`disciplineCode`), nome (`disciplineName`) e período letivo (`term`), deduplica eventos repetidos e persiste internamente a análise pré-confirmação (`backendAnalysisBatches`) antes de qualquer incorporação na agenda (`backendUserDisciplineStates`).
+   - A resposta retorna `analysisId` no topo e `meta.operationId`, além de `data` contendo `status: "PENDING_CONFIRMATION"`, `termScope`, `quota` (`limit`, `used`, `remaining`, `isUnlimited`, `term`, `selectionRequired`) e `disciplines[]` com `selectionId`, `disciplineKey`, dados essenciais (`disciplineName`, `disciplineCode`, `term`, `professor`, `classroom`, `schedule`, `parsedSchedule`, `recommendedColorHex`), `consolidation` (incluindo detecção de ambiguidades), `activities` (`hasExtractedActivities`, `totalCount`, `evaluativeCount`, `countsByType`) e `quotaEligibility`.
+   - Eventos detalhados (`events[]`) não são incorporados nem liberados na prévia antes da confirmação.
+2. **`POST /api/v1/documents/extractions/:analysisId/confirm`** recebe `{ selectedDisciplineIds, ambiguityResolutions? }` e executa uma transação atômica:
+   - Valida a seleção contra a cota restante (`BASE_PLAN_DISCIPLINE_LIMIT`, padrão `6`, validada como inteiro positivo na inicialização) por usuário e período letivo.
+   - Se a seleção exceder a cota disponível, rejeita com HTTP `422` (`DISCIPLINE_QUOTA_EXCEEDED`) sem aplicar nenhuma disciplina, preservando a análise pendente.
+   - Incorpora em `fullDisciplines[]` (com `events[]` completos) apenas as disciplinas selecionadas (e preserva como `FULL` disciplinas já confirmadas como completas anteriormente no mesmo semestre, mesmo que não selecionadas em um reenvio).
+   - Incorpora em `essentialOnlyDisciplines[]` (apenas dados essenciais e `events: []`) as demais disciplinas do lote e disciplinas sem atividades extraídas (como comprovantes de matrícula), sem consumir vagas da cota.
+   - Permite upgrade posterior de comprovante (`ESSENTIAL_ONLY`) para plano completo (`FULL`) preservando dados essenciais como sala e horário.
+   - Garante idempotência para confirmações repetidas com a mesma seleção (`200 OK`) e bloqueio de seleção conflitante após confirmado (`409 ANALYSIS_ALREADY_CONFIRMED`).
+3. **`GET /api/v1/documents/extractions/:analysisId`** e **`GET /api/v1/documents/quota?term=YYYY/S`** permitem retomar a prévia/resultado confirmado e consultar a cota utilizada e restante no semestre.
+
+### Erros específicos da seleção e cota
+
+| Situação | HTTP | `code` | `retryable` |
+| --- | :---: | --- | :---: |
+| Seleção excede a cota disponível do plano base | 422 | `DISCIPLINE_QUOTA_EXCEEDED` | `false` |
+| Disciplina selecionada não possui atividades extraídas | 422 | `DISCIPLINE_HAS_NO_ACTIVITIES` | `false` |
+| Associação ambígua pendente de revisão (RF05) | 422 | `AMBIGUOUS_DISCIPLINE_REQUIRES_REVIEW` | `false` |
+| Payload ou `selectionId` inválido na confirmação | 400 | `INVALID_CONFIRMATION_PAYLOAD` / `INVALID_DISCIPLINE_SELECTION` | `false` |
+| JSON malformado no corpo da requisição | 400 | `INVALID_JSON` | `false` |
+| Análise inexistente ou expirada | 404 | `ANALYSIS_NOT_FOUND` | `false` |
+| Análise pertence a outro usuário | 403 | `ACCESS_DENIED` | `false` |
+| Análise já confirmada com seleção diferente | 409 | `ANALYSIS_ALREADY_CONFIRMED` | `false` |
+| Armazenamento do plano indisponível | 503 | `PLAN_STORAGE_UNAVAILABLE` | `true` |

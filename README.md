@@ -40,6 +40,7 @@ O Render fornece `PORT` automaticamente. A API escuta em `0.0.0.0`, compila o Ty
 | `MAX_PDF_SIZE_MB` | Não | `20` | Limite de tamanho dos documentos. |
 | `MAX_UPLOAD_TOTAL_MB` | Não | `20` | Limite total por envio, considerando até dez arquivos. |
 | `MAX_CONCURRENT_EXTRACTIONS` | Não | `2` | Extrações simultâneas por processo. |
+| `BASE_PLAN_DISCIPLINE_LIMIT` | Não | `6` | Limite de disciplinas com extração completa de atividades via IA por período letivo no plano base. |
 | `USER_DAILY_REQUESTS` / `GLOBAL_DAILY_REQUESTS` | Não | `20` / `200` | Cotas diárias de novas análises. |
 | `USER_REQUESTS_PER_MINUTE` | Não | `3` | Limite por usuário em janela fixa UTC. |
 | `USER_DAILY_AI_ATTEMPTS` / `GLOBAL_DAILY_AI_ATTEMPTS` | Não | `40` / `400` | Cotas diárias de chamadas aos provedores, incluindo retries/fallback. |
@@ -76,7 +77,10 @@ Enquanto a OpenAI estiver inativa, mantenha `AI_PROVIDER=gemini` e `AI_FALLBACK_
 ## Endpoints
 
 - `GET /health`
-- `POST /api/v1/documents/extract`
+- `POST /api/v1/documents/extract` (análise pré-confirmação e retorno da prévia + cota do plano base)
+- `GET /api/v1/documents/extractions/:analysisId` (consulta prévia pendente ou resultado confirmado)
+- `POST /api/v1/documents/extractions/:analysisId/confirm` (confirmação atômica da seleção de disciplinas dentro da cota)
+- `GET /api/v1/documents/quota?term=YYYY/S` (cota e disciplinas incorporadas no período letivo)
 - `GET /api/v1/admin/usage?from=YYYY-MM-DD&to=YYYY-MM-DD&format=json|csv` (ID token de administrador)
 
 O endpoint de extração usa `multipart/form-data` e aceita de 1 a 10 documentos por envio, entre PDFs e imagens JPEG, PNG ou WebP, inclusive misturados. Repita o campo `files` para múltiplos documentos; `file` também é aceito. O limite de 10 considera a soma dos dois campos.

@@ -5,7 +5,7 @@ import type { Env } from "../src/config/env.js";
 import type { AcademicExtractor } from "../src/services/academic-extractor.js";
 import { MemoryUsageStore, testSecurity } from "./support.js";
 
-const env: Env = { NODE_ENV: "test", PORT: 3000, AI_PROVIDER: "gemini", AI_FALLBACK_PROVIDER: "none", GEMINI_API_KEY: "test", GEMINI_MODEL: "test", GEMINI_FALLBACK_MODEL: "test-lite", OPENAI_MODEL: "gpt-5-mini", AI_DOCUMENT_CACHE_TTL_DAYS: 30, AI_CACHE_TTL_MINUTES: 1440, AI_CACHE_MAX_ENTRIES: 100, MAX_PDF_SIZE_MB: 1, CORS_ORIGIN: "*" };
+const env: Env = { NODE_ENV: "test", PORT: 3000, AI_PROVIDER: "gemini", AI_FALLBACK_PROVIDER: "none", GEMINI_API_KEY: "test", GEMINI_MODEL: "test", GEMINI_FALLBACK_MODEL: "test-lite", OPENAI_MODEL: "gpt-5-mini", AI_DOCUMENT_CACHE_TTL_DAYS: 30, AI_CACHE_TTL_MINUTES: 1440, AI_CACHE_MAX_ENTRIES: 100, MAX_PDF_SIZE_MB: 1, BASE_PLAN_DISCIPLINE_LIMIT: 6, CORS_ORIGIN: "*" };
 const data = { disciplines: [{ documentTitle: "Plano", disciplineName: "Cálculo I", disciplineCode: "MAT101", professor: "Ada", term: "2026/2", classroom: "A1", schedule: "Seg 08:00", recommendedColorHex: "#2563EB", events: [] }] };
 
 describe("POST /api/v1/documents/extract", () => {

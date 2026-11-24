@@ -6,6 +6,7 @@ import type { UsageConfig } from "./config.js";
 import { FirestoreUsageStore } from "./firestore-store.js";
 import { UsageService } from "./meter.js";
 import { FirestoreDocumentCache } from "../services/document-cache.js";
+import { FirestoreDisciplinePlanStore } from "../plan/firestore-plan-store.js";
 
 export function createFirebaseSecurity(config: UsageConfig): AppSecurity & { documentCache: FirestoreDocumentCache } {
   const credential = config.FIREBASE_SERVICE_ACCOUNT_JSON
@@ -18,6 +19,7 @@ export function createFirebaseSecurity(config: UsageConfig): AppSecurity & { doc
     unlimitedEmails: config.unlimitedEmails, admins: config.admins,
     usage: new UsageService(new FirestoreUsageStore(db), config.limits, config.prices),
     maxConcurrentExtractions: config.MAX_CONCURRENT_EXTRACTIONS,
-    maxUploadTotalMb: config.MAX_UPLOAD_TOTAL_MB
+    maxUploadTotalMb: config.MAX_UPLOAD_TOTAL_MB,
+    planStore: new FirestoreDisciplinePlanStore(db)
   };
 }
