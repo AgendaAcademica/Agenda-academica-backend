@@ -15,7 +15,7 @@ export function createFirebaseSecurity(config: UsageConfig): AppSecurity & { doc
   return {
     documentCache: new FirestoreDocumentCache(db),
     verifyToken: token => getAuth(app).verifyIdToken(token, true),
-    testers: config.testers, admins: config.admins,
+    unlimitedEmails: config.unlimitedEmails, admins: config.admins,
     usage: new UsageService(new FirestoreUsageStore(db), config.limits, config.prices),
     maxConcurrentExtractions: config.MAX_CONCURRENT_EXTRACTIONS,
     maxUploadTotalMb: config.MAX_UPLOAD_TOTAL_MB
